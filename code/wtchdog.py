@@ -5,6 +5,15 @@ import os
 from watchdog.observers import Observer
 from watchdog.events import LoggingEventHandler, FileSystemEventHandler, FileSystemEvent
 import sqlite3
+import hashlib
+
+
+def checksum_md5(filename):
+    md5 = hashlib.md5()
+    with open(filename, 'rb') as f:
+        for chunk in iter(lambda: f.read(8192), b''):
+            md5.update(chunk)
+    return md5.hexdigest()
 
 
 class CustomEventHandler(FileSystemEventHandler):
@@ -28,12 +37,15 @@ class CustomEventHandler(FileSystemEventHandler):
         if file_name == self.config:
             print('WOW!!!!!')
             self.update_config = True
+            print(self.update_config)
 
         cur.execute("""INSERT INTO test1(file_name, is_created, is_modified,
         is_deleted, is_moved, time, is_directory) VALUES(?, ?, ?, ?, ?, ?, ?);""", data)
         conn.commit()
-        with open(self.file, 'a') as f:
-            f.writelines('this {} changed {}\n'.format(what, file_name))
+        print(f'this {what} changed {file_name}')
+        # print([i for i in self.dict_of_watches])
+        # with open(self.file, 'a') as f:
+        #     f.writelines('this {} changed {}\n'.format(what, file_name))
 
     def on_created(self, event):
         conn = sqlite3.connect('mydatabase.db')
@@ -44,8 +56,10 @@ class CustomEventHandler(FileSystemEventHandler):
         cur.execute("""INSERT INTO test1(file_name, is_created, is_modified,
                is_deleted, is_moved, time, is_directory) VALUES(?, ?, ?, ?, ?, ?, ?);""", data)
         conn.commit()
-        with open(self.file, 'a') as f:
-            f.writelines('this {} created {}\n'.format(what, os.path.abspath(file_name)))
+        print(f'this {what} created {file_name}')
+        # print([i for i in self.dict_of_watches])
+        # with open(self.file, 'a') as f:
+        #     f.writelines('this {} created {}\n'.format(what, os.path.abspath(file_name)))
 
     def on_deleted(self, event):
         conn = sqlite3.connect('mydatabase.db')
@@ -56,8 +70,10 @@ class CustomEventHandler(FileSystemEventHandler):
         cur.execute("""INSERT INTO test1(file_name, is_created, is_modified,
                is_deleted, is_moved, time, is_directory) VALUES(?, ?, ?, ?, ?, ?, ?);""", data)
         conn.commit()
-        with open(self.file, 'a') as f:
-            f.writelines('this {} deleted {}\n'.format(what, os.path.abspath(file_name)))
+        print(f'this {what} deleted {file_name}')
+        # print([i for i in self.dict_of_watches])
+        # with open(self.file, 'a') as f:
+        #     f.writelines('this {} deleted {}\n'.format(what, os.path.abspath(file_name)))
 
     def on_moved(self, event):
         conn = sqlite3.connect('mydatabase.db')
@@ -68,8 +84,10 @@ class CustomEventHandler(FileSystemEventHandler):
         cur.execute("""INSERT INTO test1(file_name, is_created, is_modified,
                is_deleted, is_moved, time, is_directory) VALUES(?, ?, ?, ?, ?, ?, ?);""", data)
         conn.commit()
-        with open(self.file, 'a') as f:
-            f.writelines('this {} moved {}\n'.format(what, os.path.abspath(file_name)))
+        print(f'this {what} moved {file_name}')
+        # print([i for i in self.dict_of_watches])
+        # with open(self.file, 'a') as f:
+        #     f.writelines('this {} moved {}\n'.format(what, os.path.abspath(file_name)))
 
 
 class BasicClass:
@@ -93,7 +111,7 @@ class BasicClass:
             if self.list_of_files:
                 for path in self.list_of_files:
                     print(path, 'Пути из list_of_file')  # debug
-                    self.add_to_watch(path)  # ФЛАГ рекурсии?
+                    self.add_to_watch(path)  # ФЛАГ рекурсии? получать конфиг из базы при пуске
                 self.dump_file()
                 self.clear_start = False
                 self.observer.start()
@@ -107,8 +125,10 @@ class BasicClass:
             self.list_of_files.append(os.path.abspath(path))
 
     def dump_file(self):
-        with open(self.watch_file, 'w') as f:
-            f.writelines(self.list_of_files)
+        print('dump_file was called')
+        data = [file + '\n' for file in self.dict_of_watches]
+        with open(self.watch_file, 'w') as foo:
+            foo.writelines(data)
 
     def remove_from_watch(self, path):
         descriptor = self.dict_of_watches[path]
@@ -128,6 +148,8 @@ if __name__ == "__main__":
 
     try:
         while True:
+            print("TRUE CYCLE")
+            print('update_config: ', basic.event_handler.update_config)
             if basic.clear_start:
                 path = input('Input path to file or directory\n')
                 basic.add_to_watch(path)
@@ -160,18 +182,21 @@ if __name__ == "__main__":
                 time.sleep(3)
                 print('спим 3 сек')
                 basic.event_handler.update_config = False
-            print('update_config: ', basic.event_handler.update_config)
-
-                # new_command, path = input('Input command and path to file\n').split()
-                # if new_command == 'add':
-                #     basic.add_to_watch(path)
-                #     basic.dump_file()
-                #
-                # if new_command == 'remove':
-                #     if path in basic.dict_of_watches:
-                #         basic.remove_from_watch(path)
-                #         basic.dump_file()
+                print('update_config: ', basic.event_handler.update_config)
+            else:
+                time.sleep(1)
+            # else:
+            #     new_command, path = input('Input command and path to file\n').split()
+            #     if new_command == 'add':
+            #         basic.add_to_watch(path)
+            #         basic.dump_file()
+            #
+            #     if new_command == 'remove':
+            #         if path in basic.dict_of_watches:
+            #             basic.remove_from_watch(path)
+            #             basic.dump_file()
 
     finally:
+        print('FINISH')
         basic.observer.stop()
         basic.observer.join()
