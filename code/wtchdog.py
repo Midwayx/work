@@ -15,8 +15,15 @@ def checksum_md5(filename):
             md5.update(chunk)
     return md5.hexdigest()
 
+def call_later(ms, callback, *args, **kwargs):
+   #: Timer/event loop specific
+   #: called after the given ms "timeout" expires
+    time.sleep(ms/1000)
+    callback(*args, **kwargs)
+
 
 class CustomEventHandler(FileSystemEventHandler):
+    cache = {}
     file = '/home/user/my_folder/tmpfile'
     #conn = sqlite3.connect('mydatabase.db', check_same_thread=False)
     #cur = conn.cursor()
@@ -28,24 +35,32 @@ class CustomEventHandler(FileSystemEventHandler):
     list_of_files = []
     update_config = False
 
-    def on_modified(self, event):
+    def on_closed(self, event):
+        seconds = int(time.time())
+        file_name = os.path.abspath(event.src_path) # get the path of the modified file
+        if file_name in self.cache and (seconds - self.cache[file_name] < 5):
+            #print(seconds - self.cache[file_name])
+            return
+        self.cache[file_name] = seconds
         conn = sqlite3.connect('mydatabase.db')
         cur = conn.cursor()
-        what = 'directory' if event.is_directory else 'file'
-        file_name = os.path.abspath(event.src_path)  # get the path of the modified file
-        data = (file_name, 0, 1, 0, 0, time.time(), event.is_directory)
+        md5 = None
+        if event.is_directory:
+            what = 'directory'
+        else:
+            what = 'file'
+            md5 = checksum_md5(file_name)
+        data = (file_name, md5, time.time(), event.is_directory, 1)
+        print(md5)
         if file_name == self.config:
-            print('WOW!!!!!')
+            print('WOW!!!')
             self.update_config = True
             print(self.update_config)
 
-        cur.execute("""INSERT INTO test1(file_name, is_created, is_modified,
-        is_deleted, is_moved, time, is_directory) VALUES(?, ?, ?, ?, ?, ?, ?);""", data)
+        cur.execute("""INSERT INTO config(file_name, md5, time, is_directory, event_type) 
+        VALUES(?, ?, ?, ?, ?);""", data)
         conn.commit()
         print(f'this {what} changed {file_name}')
-        # print([i for i in self.dict_of_watches])
-        # with open(self.file, 'a') as f:
-        #     f.writelines('this {} changed {}\n'.format(what, file_name))
 
     def on_created(self, event):
         conn = sqlite3.connect('mydatabase.db')
@@ -148,8 +163,8 @@ if __name__ == "__main__":
 
     try:
         while True:
-            print("TRUE CYCLE")
-            print('update_config: ', basic.event_handler.update_config)
+            #print("TRUE CYCLE")
+            #print('update_config: ', basic.event_handler.update_config)
             if basic.clear_start:
                 path = input('Input path to file or directory\n')
                 basic.add_to_watch(path)
@@ -157,6 +172,7 @@ if __name__ == "__main__":
                 basic.observer.start()
                 basic.clear_start = False
             elif basic.event_handler.update_config:
+                list_of_nconf = []
                 print('CHANGED STATUS')
                 time.sleep(5)
                 with open(basic.event_handler.config, 'r') as f:
@@ -176,6 +192,7 @@ if __name__ == "__main__":
                             print('This file already watching: ', j)
                         else:
                             basic.add_to_watch(j)
+                            #print(checksum_md5(j)) directory?
                             basic.dump_file()
                 print('update_config: ', basic.event_handler.update_config)
                 print('dict of files after update: \n', basic.dict_of_watches)
