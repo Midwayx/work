@@ -16,22 +16,33 @@ sockobj = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sockobj.connect((serverHost, serverPort))
 
 
-def keep_alive(connect):
+def keep_alive(connect, salt):
+    # while True:
+    #     salt = connect.recv(2048)  # TODO Ловить соль везде. Блокировать выполнение до подтверждения получения
+    #     if salt:
+    #         salt = pickle.loads(salt)
+    #         if salt[0] == 'salt':
+    #             salt = salt[1]
+    #             break
 
     while True:
-        print('[INFO] Send keep-alive message.')
-        msg = pickle.dumps((now(), 'md5', 'salt'))
-        connect.send(msg)
-        #ans = connect.recv(1024)
-        #print(pickle.loads(ans))
+        # md5 = checksum_md5(sys.argv[0], salt=salt)
+        # print('[INFO] Send keep-alive message.')
+        # msg = pickle.dumps(('KEEP-ALIVE', now(), md5, salt))
+        # connect.send(msg)
+        # #ans = connect.recv(1024)
+        # #print(pickle.loads(ans))
+        # #changes
         time.sleep(10)
 
 
-def checksum_md5(filename):
+def checksum_md5(filename, salt=None):
     md5 = hashlib.md5()
     with open(filename, 'rb') as f:
         for chunk in iter(lambda: f.read(8192), b''):
             md5.update(chunk)
+            if salt:
+                md5.update(salt)
     return md5.hexdigest()
 
 
@@ -46,10 +57,20 @@ def now():
     return time.ctime(time.time())
 
 def worker(sock):
-    z = threading.Thread(target=keep_alive, args=(sock,))
+    while True:
+        salt = sock.recv(2048)  # TODO Ловить соль везде. Блокировать выполнение до подтверждения получения
+        if salt:
+            salt = pickle.loads(salt)
+            if salt[0] == 'salt':
+                salt = salt[1]
+                break
+    z = threading.Thread(target=keep_alive, args=(sock, salt))
     z.start()
-    commands = {'add': basic.add_to_watch, 'OK': 'OK', 'rm': basic.remove_from_watch,}
-    info = ['OK']
+    commands = {'add': basic.add_to_watch, 'OK': 'OK',
+                'rm': basic.remove_from_watch, 'rm_all': basic.remove_all_from_watch,
+                'send_cur_watches': basic.return_list_of_files,
+                }
+    info = ['OK KEEP-ALIVE', 'CRITICAL ERROR', 'EXIT']
     while True:
         data = sock.recv(1024)
         if not data:
@@ -60,31 +81,52 @@ def worker(sock):
             #print(cmd)
             if cmd[0] in info:
                 print(f'[INFO Requested from {sock.getpeername()}]', cmd)
+                if cmd[0] == 'EXIT':
+                    sys.exit()
                 continue
-            #basic.add_to_watch('/home/midway/test/th')
-            commands[cmd[0]](cmd[1])
-            sock.send(pickle.dumps(f'OK {cmd}'))
+            if cmd[0] in commands:  # TODO  адекватно переписать, чушь полная, обработчки в отдельную функцию
+                print('COMMAND ')
+                print(cmd)
+                print(len(cmd))
+                if len(cmd) == 2:
+                    commands[cmd[0]](cmd[1])
+                elif len(cmd) == 1:
+                    if cmd[0] == 'send_cur_watches':
+                        response = ('OK', ('send_cur_watches',), commands[cmd[0]]())
+                        print(response)
+                        ans = pickle.dumps(response)
+                        sock.send(ans)
+                        continue
+                    commands[cmd[0]]()
+            else:
+                print('Unsupported command')
+                print(pickle.loads(data))
+                continue
+            ans = pickle.dumps(('OK', cmd))
+            sock.send(ans)  # TODO отправлять из другого места, так как тут не гарантируется успешность
 
         except Exception as e:
             print('except  ', e.args)
             continue
+
+
 class CustomEventHandler(FileSystemEventHandler):
     cache = {}
-    file = '/home/midway/my_folder/tmpfile'
+    file = '/home/user/my_folder/tmpfile'
     #conn = sqlite3.connect('mydatabase.db', check_same_thread=False)
     #cur = conn.cursor()
-    config = '/home/midway/config.txt'
+    config = '/home/user/config.txt'
 
     dict_of_watches = dict()
     log_file = ''
-    watch_file = '/home/midway/watch_file'
+    watch_file = '/home/user/watch_file'
     list_of_files = []
     update_config = False
 
     def on_closed(self, event):
         seconds = int(time.time())
         file_name = os.path.abspath(event.src_path) # get the path of the modified file
-        if file_name in self.cache and (seconds - self.cache[file_name] < 5):
+        if file_name in self.cache and (seconds - self.cache[file_name] < 10):
             #print(seconds - self.cache[file_name])
             return
         self.cache[file_name] = seconds
@@ -106,7 +148,7 @@ class CustomEventHandler(FileSystemEventHandler):
         cur.execute("""INSERT INTO config(file_name, md5, time, is_directory, event_type) 
         VALUES(?, ?, ?, ?, ?);""", data)
         conn.commit()
-        data = pickle.dumps(f'[WARNING from {sockobj.getsockname()}] This {what} changed {file_name}')
+        data = pickle.dumps(('WARNING-CHANGES', sockobj.getsockname(), f'This {what} changed {file_name}'))
         print(f'this {what} changed {file_name}')
         sockobj.send(data)
 
@@ -157,7 +199,7 @@ class BasicClass:
 
     # dict_of_watches = event_handler.dict_of_watches
     log_file = ''
-    watch_file = '/home/midway/watch_file'
+    watch_file = '/home/user/watch_file'
     # list_of_files = []
 
     def __init__(self, observer: Observer, event_handler: CustomEventHandler):
@@ -169,13 +211,13 @@ class BasicClass:
         print(self.watch_file)
         with open(self.watch_file, 'r') as f:
             for i in f:
-                print(i, 'Наполняем list-of_files из watch_file')  # debug
-                self.list_of_files.append(i.strip())
+                #print(i, 'Наполняем list-of_files из watch_file')  # debug
+                self.list_of_files.append(i.strip())  # TODO Переписать красиво
             if self.list_of_files:
                 for path in self.list_of_files:
-                    print(path, 'Пути из list_of_file')  # debug
+                    #print(path, 'Пути из list_of_file')  # debug
                     self.add_to_watch(path)  # ФЛАГ рекурсии? получать конфиг из базы при пуске
-                self.dump_file()
+                #self.dump_file()
                 self.clear_start = False
                 self.observer.start()
             else:
@@ -187,8 +229,10 @@ class BasicClass:
             print('This file already watches')
             return
         self.dict_of_watches[path] = self.observer.schedule(self.event_handler, path, recursive=recursive)
-        if self.clear_start:
-            self.list_of_files.append(os.path.abspath(path))
+        if self.clear_start:  # TODO Что это?
+            pass
+        self.list_of_files.append(os.path.abspath(path))
+        self.dump_file()
 
     def dump_file(self):
         print('dump_file was called')
@@ -204,6 +248,10 @@ class BasicClass:
 
     def remove_all_from_watch(self):
         self.observer.unschedule_all()
+        self.dict_of_watches = {}
+
+    def return_list_of_files(self):
+        return [i for i in self.dict_of_watches]
 
 
 if __name__ == "__main__":
@@ -220,55 +268,14 @@ if __name__ == "__main__":
     try:
         while True:
 
-            #print("TRUE CYCLE")
-            #print('update_config: ', basic.event_handler.update_config)
             if basic.clear_start:
-                path = input('Input path to file or directory\n')
+                path = input('Input path to file or directory\n')  # TODO Исправить/удалить
                 basic.add_to_watch(path)
                 basic.dump_file()
                 basic.observer.start()
                 basic.clear_start = False
-            elif basic.event_handler.update_config:
-                list_of_nconf = []
-                print('CHANGED STATUS')
-                time.sleep(5)
-                with open(basic.event_handler.config, 'r') as f:
-                    for i in f:
-                        list_of_nconf.append((i.strip().split()))
-
-                print(list_of_nconf, 'list of new configs')
-                for i, j in list_of_nconf:
-                    if int(i) == 0:
-                        if j in basic.dict_of_watches:
-                            basic.remove_from_watch(j)
-                            basic.dump_file()
-                        else:
-                            print('this file is not watching: ', j)
-                    if int(i) == 1:
-                        if j in basic.dict_of_watches:
-                            print('This file already watching: ', j)
-                        else:
-                            basic.add_to_watch(j)
-                            #print(checksum_md5(j)) directory?
-                            basic.dump_file()
-                print('update_config: ', basic.event_handler.update_config)
-                print('dict of files after update: \n', basic.dict_of_watches)
-                time.sleep(3)
-                print('спим 3 сек')
-                basic.event_handler.update_config = False
-                print('update_config: ', basic.event_handler.update_config)
             else:
                 time.sleep(1)
-            # else:
-            #     new_command, path = input('Input command and path to file\n').split()
-            #     if new_command == 'add':
-            #         basic.add_to_watch(path)
-            #         basic.dump_file()
-            #
-            #     if new_command == 'remove':
-            #         if path in basic.dict_of_watches:
-            #             basic.remove_from_watch(path)
-            #             basic.dump_file()
 
     finally:
         print('FINISH')
