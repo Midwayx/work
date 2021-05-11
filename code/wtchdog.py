@@ -38,7 +38,7 @@ def cmd_handler(data, peer_name):
     """
     commands = {'add': basic.add_to_watch, 'OK': 'OK',
                 'rm': basic.remove_from_watch, 'rm_all': basic.remove_all_from_watch,
-                'send_cur_watches': basic.return_list_of_files,
+                'get_watchlist': basic.return_list_of_files,
                 }
     info = ['OK KEEP-ALIVE', 'CRITICAL ERROR', 'EXIT']
     msg = pickle.loads(data)
@@ -58,6 +58,8 @@ def cmd_handler(data, peer_name):
             sent.remove(what)
         elif status == 'OK KEEP-ALIVE':
             print(f'[{peer_name} RESPONSE]: ', msg)
+        elif what == 'CRITICAL ERROR':
+            print(f'[CRITICAL ERROR] This file was changed!')
         else:
             pass  # TODO Доработать тут обработку ошибок
     else:
@@ -117,11 +119,11 @@ class CustomEventHandler(FileSystemEventHandler):
     file = '/home/midway/my_folder/tmpfile'
     #conn = sqlite3.connect('mydatabase.db', check_same_thread=False)
     #cur = conn.cursor()
-    config = '/home/midway/config.txt'
+    config = '/home/user/config.txt'
 
     dict_of_watches = dict()
     log_file = ''
-    watch_file = '/home/midway/watch_file'
+    watch_file = '/home/user/watch_file'
     list_of_files = []
     update_config = False
 
@@ -159,6 +161,9 @@ class CustomEventHandler(FileSystemEventHandler):
                is_deleted, is_moved, time, is_directory) VALUES(?, ?, ?, ?, ?, ?, ?);""", data)
         conn.commit()
         print(f'this {what} created {file_name}')
+        data = pickle.dumps(('WARNING-CHANGES', sockobj.getsockname(), f'This {what} created: {file_name}'))
+        print(f'this {what} created: {file_name}')
+        sockobj.send(data)
         # print([i for i in self.dict_of_watches])
         # with open(self.file, 'a') as f:
         #     f.writelines('this {} created {}\n'.format(what, os.path.abspath(file_name)))
@@ -172,12 +177,18 @@ class CustomEventHandler(FileSystemEventHandler):
         cur.execute("""INSERT INTO test1(file_name, is_created, is_modified,
                is_deleted, is_moved, time, is_directory) VALUES(?, ?, ?, ?, ?, ?, ?);""", data)
         conn.commit()
-        print(f'this {what} deleted {file_name}')
+        #print(f'this {what} deleted {file_name}')
+        data = pickle.dumps(('WARNING-CHANGES', sockobj.getsockname(), f'This {what} deleted: {file_name}'))
+        print(f'this {what} deleted: {file_name}')
+        sockobj.send(data)
+        basic.remove_from_watch(event.src_path)
+
         # print([i for i in self.dict_of_watches])
         # with open(self.file, 'a') as f:
         #     f.writelines('this {} deleted {}\n'.format(what, os.path.abspath(file_name)))
 
     def on_moved(self, event):
+        print(' Я сработал')
         conn = sqlite3.connect('mydatabase.db')
         cur = conn.cursor()
         what = 'directory' if event.is_directory else 'file'
@@ -187,6 +198,9 @@ class CustomEventHandler(FileSystemEventHandler):
                is_deleted, is_moved, time, is_directory) VALUES(?, ?, ?, ?, ?, ?, ?);""", data)
         conn.commit()
         print(f'this {what} moved {file_name}')
+        data = pickle.dumps(('WARNING-CHANGES', sockobj.getsockname(), f'This {what} moved: {file_name}'))
+        print(f'this {what} moved: {file_name}')
+        sockobj.send(data)
         # print([i for i in self.dict_of_watches])
         # with open(self.file, 'a') as f:
         #     f.writelines('this {} moved {}\n'.format(what, os.path.abspath(file_name)))
@@ -196,7 +210,7 @@ class BasicClass:
 
     # dict_of_watches = event_handler.dict_of_watches
     log_file = ''
-    watch_file = '/home/midway/watch_file'
+    watch_file = '/home/user/watch_file'
     # list_of_files = []
 
     def __init__(self, observer: Observer, event_handler: CustomEventHandler):
@@ -208,11 +222,9 @@ class BasicClass:
         print(self.watch_file)
         with open(self.watch_file, 'r') as f:
             for i in f:
-                #print(i, 'Наполняем list-of_files из watch_file')  # debug
                 self.list_of_files.append(i.strip())  # TODO Переписать красиво
             if self.list_of_files:
                 for path in self.list_of_files:
-                    #print(path, 'Пути из list_of_file')  # debug
                     self.add_to_watch(path)  # ФЛАГ рекурсии? получать конфиг из базы при пуске
                 #self.dump_file()
                 self.clear_start = False
@@ -256,6 +268,7 @@ class BasicClass:
 
     def return_list_of_files(self):
         return 'OK', [i for i in self.dict_of_watches]
+
 
 if __name__ == "__main__":
     event_handler = CustomEventHandler()

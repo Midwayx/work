@@ -11,6 +11,7 @@ INFO = ['WARNING-CHANGES']
 
 clients = {}
 
+
 def now():
     return time.ctime(time.time())
 
@@ -26,7 +27,6 @@ def checksum_md5(filename, salt=None):
 
 
 def send_com(conn):
-    #reply = pickle.dumps(['add', '/home/midway/test/th'])
     while True:
         cmd_list = clients
         row_reply = ('cmd',) + tuple(x for x in input().strip().split())
@@ -37,7 +37,6 @@ def send_com(conn):
 
 def main_thread():
     while True:
-        #print('Жду команд')
         client, *cmd = tuple(x for x in input().strip().split())
         if client in clients:
             print('[MAIN THREAD]: cmd added')
@@ -56,15 +55,15 @@ class MyClienthandler(socketserver.BaseRequestHandler):
         clients[client_ip] = []
         salt = secrets.token_bytes(16)
         salt_msg = pickle.dumps(('salt', salt))  # TODO добавить в словарь с именами потоков
-        check_sum = checksum_md5('/home/midway/NIRS/code/work/code/wtchdog.py', salt=salt)
+        check_sum = checksum_md5('/home/user/Projects/checker/code/wtchdog.py', salt=salt)
         if client_ip == '192.168.192.130':
             check_sum = checksum_md5('/home/midway/NIRS/code/work/code/files/1.py', salt=salt)
 
-        print(self.client_address, now())
-        print(f'salt = {salt}, check_sum = {check_sum}')
+        print(f'[CONNECTION REQUEST {client_ip}:{client_port}] at {now()}')
+        print(f'[AUTH DATA] SALT = {salt} CHECK_SUM = {check_sum}')
         while True:
             data = pickle.loads(self.request.recv(1024))
-            print(data)
+            #print(data)
             if data[0] == 'ready to auth':
                 self.request.send(salt_msg)
             elif data == salt:
