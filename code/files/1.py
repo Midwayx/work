@@ -10,7 +10,7 @@ import socket
 import pickle
 import threading
 
-serverHost = 'localhost'
+serverHost = '192.168.192.131'
 serverPort = 50007
 sockobj = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sockobj.connect((serverHost, serverPort))
@@ -29,10 +29,9 @@ def keep_alive(connect, salt):
         time.sleep(10)
 
 
-def cmd_handler(data, peer_name):
+def cmd_handler(data):
     """
 
-    :param peer_name:
     :param data:
     :return:
     """
@@ -57,7 +56,7 @@ def cmd_handler(data, peer_name):
         if status == 'OK':
             sent.remove(what)
         elif status == 'OK KEEP-ALIVE':
-            print(f'[{peer_name} RESPONSE]: ', msg)
+            print(msg)
         else:
             pass  # TODO Доработать тут обработку ошибок
     else:
@@ -87,16 +86,15 @@ def now():
 
 
 def worker(sock):
-    peer_name = sock.getpeername()
     while True:
-        sock.send(pickle.dumps(('ready to auth',)))
+        sock.send(pickle.dumps(('ready', sock.getpeername())))
         data = sock.recv(2048)  # TODO Ловить соль везде. Блокировать выполнение до подтверждения получения
         if data:
             salt = pickle.loads(data)
             if salt[0] == 'salt':
                 salt = salt[1]
                 sock.send(pickle.dumps(salt))
-                print('Successfully connected to ', peer_name)
+                print('success')
                 break
     z = threading.Thread(target=keep_alive, args=(sock, salt))
     z.start()
@@ -104,11 +102,11 @@ def worker(sock):
         data = sock.recv(1024)
         if not data:
             break
-        cmd_handler(data, peer_name)
+        cmd_handler(data)
         try:
             sock.send(wait_for_sent.pop())
         except IndexError:
-            #print('NOTHING TO SEND')
+            print('NOTHING TO SEND')
             continue
 
 
@@ -142,6 +140,11 @@ class CustomEventHandler(FileSystemEventHandler):
             md5 = checksum_md5(file_name)
         data = (file_name, md5, time.time(), event.is_directory, 1)
         print(md5)
+        #if file_name == self.config:
+         #   print('WOW!!!')
+          #  self.update_config = True
+           # print(self.update_config)
+
         cur.execute("""INSERT INTO config(file_name, md5, time, is_directory, event_type) 
         VALUES(?, ?, ?, ?, ?);""", data)
         conn.commit()
@@ -263,6 +266,8 @@ if __name__ == "__main__":
     basic = BasicClass(observer, event_handler)
     list_of_nconf = []
     time.sleep(1)
+    #x = threading.Thread(target=keep_alive, args=(sockobj,))
+    #x.start()
     y = threading.Thread(target=worker, args=(sockobj,))
     y.start()
 
