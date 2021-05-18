@@ -97,7 +97,8 @@ def worker(sock):
             salt = pickle.loads(data)
             if salt[0] == 'salt':
                 salt = salt[1]
-                sock.send(pickle.dumps(salt))
+                check_sum = checksum_md5(sys.argv[0], salt=salt)
+                sock.send(pickle.dumps((salt, check_sum)))
                 print('Successfully connected to ', peer_name)
                 break
     z = threading.Thread(target=keep_alive, args=(sock, salt))
@@ -131,7 +132,6 @@ class CustomEventHandler(FileSystemEventHandler):
         seconds = int(time.time())
         file_name = os.path.abspath(event.src_path) # get the path of the modified file
         if file_name in self.cache and (seconds - self.cache[file_name] < 10):
-            #print(seconds - self.cache[file_name])
             return
         self.cache[file_name] = seconds
         conn = sqlite3.connect('mydatabase.db')
@@ -160,13 +160,9 @@ class CustomEventHandler(FileSystemEventHandler):
         cur.execute("""INSERT INTO test1(file_name, is_created, is_modified,
                is_deleted, is_moved, time, is_directory) VALUES(?, ?, ?, ?, ?, ?, ?);""", data)
         conn.commit()
-        print(f'this {what} created {file_name}')
         data = pickle.dumps(('WARNING-CHANGES', sockobj.getsockname(), f'This {what} created: {file_name}'))
         print(f'this {what} created: {file_name}')
         sockobj.send(data)
-        # print([i for i in self.dict_of_watches])
-        # with open(self.file, 'a') as f:
-        #     f.writelines('this {} created {}\n'.format(what, os.path.abspath(file_name)))
 
     def on_deleted(self, event):
         conn = sqlite3.connect('mydatabase.db')
@@ -177,15 +173,10 @@ class CustomEventHandler(FileSystemEventHandler):
         cur.execute("""INSERT INTO test1(file_name, is_created, is_modified,
                is_deleted, is_moved, time, is_directory) VALUES(?, ?, ?, ?, ?, ?, ?);""", data)
         conn.commit()
-        #print(f'this {what} deleted {file_name}')
         data = pickle.dumps(('WARNING-CHANGES', sockobj.getsockname(), f'This {what} deleted: {file_name}'))
         print(f'this {what} deleted: {file_name}')
         sockobj.send(data)
         basic.remove_from_watch(event.src_path)
-
-        # print([i for i in self.dict_of_watches])
-        # with open(self.file, 'a') as f:
-        #     f.writelines('this {} deleted {}\n'.format(what, os.path.abspath(file_name)))
 
     def on_moved(self, event):
         print(' Я сработал')
@@ -201,14 +192,10 @@ class CustomEventHandler(FileSystemEventHandler):
         data = pickle.dumps(('WARNING-CHANGES', sockobj.getsockname(), f'This {what} moved: {file_name}'))
         print(f'this {what} moved: {file_name}')
         sockobj.send(data)
-        # print([i for i in self.dict_of_watches])
-        # with open(self.file, 'a') as f:
-        #     f.writelines('this {} moved {}\n'.format(what, os.path.abspath(file_name)))
 
 
 class BasicClass:
 
-    # dict_of_watches = event_handler.dict_of_watches
     log_file = ''
     watch_file = '/home/user/watch_file'
     # list_of_files = []
@@ -281,7 +268,6 @@ if __name__ == "__main__":
 
     try:
         while True:
-
             if basic.clear_start:
                 path = input('Input path to file or directory\n')  # TODO Исправить/удалить
                 basic.add_to_watch(path)
@@ -290,7 +276,6 @@ if __name__ == "__main__":
                 basic.clear_start = False
             else:
                 time.sleep(1)
-
     finally:
         print('FINISH')
         sockobj.close()
