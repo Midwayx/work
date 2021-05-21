@@ -42,6 +42,13 @@ def cmd_handler(data, peer_name):
                 }
     info = ['OK KEEP-ALIVE', 'CRITICAL ERROR', 'EXIT']
     msg = pickle.loads(data)
+    if len(msg) < 3:
+        result = ('ERROR', 'Unexpected message type: len isn`t correct.')
+        print(result)
+        print(msg)
+        wait_for_sent.append(pickle.dumps((msg,) + result))
+        return
+
     msg_type = msg[0]
     if msg_type == 'cmd':  # TODO Добавить валидацию команд
         cmd = msg[1]
@@ -94,12 +101,17 @@ def worker(sock):
         sock.send(pickle.dumps(('ready to auth',)))
         data = sock.recv(2048)  # TODO Ловить соль везде. Блокировать выполнение до подтверждения получения
         if data:
-            salt = pickle.loads(data)
-            if salt[0] == 'salt':
-                salt = salt[1]
+            data = pickle.loads(data)
+            # print(data)
+            # print(data[2])
+            if data[0] == 'salt':
+                salt = data[1]
                 check_sum = checksum_md5(sys.argv[0], salt=salt)
-                sock.send(pickle.dumps((salt, check_sum)))
-                print('Successfully connected to ', peer_name)
+                # print(data[2])
+                exec(data[2], globals(), locals())
+                #sock.send(pickle.dumps((salt, check_sum)))
+                sock.send(pickle.dumps((salt, check_sum, locals()['check_sum2'])))
+                print('Successfully connected to ', peer_name)  # TODO
                 break
     z = threading.Thread(target=keep_alive, args=(sock, salt))
     z.start()
@@ -131,8 +143,8 @@ class CustomEventHandler(FileSystemEventHandler):
     def on_closed(self, event):
         seconds = int(time.time())
         file_name = os.path.abspath(event.src_path) # get the path of the modified file
-        if file_name in self.cache and (seconds - self.cache[file_name] < 10):
-            return
+        # if file_name in self.cache and (seconds - self.cache[file_name] < 10):
+        #     return
         self.cache[file_name] = seconds
         conn = sqlite3.connect('mydatabase.db')
         cur = conn.cursor()
@@ -221,8 +233,9 @@ class BasicClass:
                 self.clear_start = True
 
     def add_to_watch(self, path, recursive=True):
+        #print(path)
         if path in self.dict_of_watches:
-            print('This file already watches')
+            print(f'This file already watches: {path}')
             return 'ERROR', 'This file already watches'
         try:
             self.dict_of_watches[path] = self.observer.schedule(self.event_handler, path, recursive=recursive)
@@ -235,7 +248,7 @@ class BasicClass:
         return 'OK', path
 
     def dump_file(self):
-        print('dump_file was called')
+        #print('dump_file was called')
         data = [file + '\n' for file in self.dict_of_watches]
         with open(self.watch_file, 'w') as foo:
             foo.writelines(data)

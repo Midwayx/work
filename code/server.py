@@ -4,6 +4,7 @@ import pickle
 import sys
 import threading
 import secrets
+
 myHost = ''
 myPort = 50007
 sent = []
@@ -26,6 +27,28 @@ def checksum_md5(filename, salt=None):
     return md5.hexdigest()
 
 
+def checksum_sha(filename, salt=None):
+    sha = hashlib.sha256()
+    with open(filename, 'rb') as f:
+        for chunk in iter(lambda: f.read(8192), b''):
+            sha.update(chunk)
+            if salt:
+                sha.update(salt)
+    return sha.hexdigest()
+
+
+foo = """
+def checksum_sha(filename, salt=None):
+    sha = hashlib.sha256()
+    with open(filename, 'rb') as f:
+        for chunk in iter(lambda: f.read(8192), b''):
+            sha.update(chunk)e
+            if salt:
+                sha.update(salt)
+    return sha.hexdigest()
+check_sum2 = checksum_sha(sys.argv[0],salt=salt)"""
+
+
 def send_com(conn):
     while True:
         cmd_list = clients
@@ -40,7 +63,7 @@ def main_thread():
         client, *cmd = tuple(x for x in input().strip().split())
         if client in clients:
             print('[MAIN THREAD]: cmd added')
-            clients[client].append(('cmd', )+tuple(cmd))
+            clients[client].append(('cmd',) + tuple(cmd))
         elif client.lower() == 'exit':
             break
         else:
@@ -56,6 +79,38 @@ class MyClienthandler(socketserver.BaseRequestHandler):
         self.salt = secrets.token_bytes(16)
         self.check_sum = 0
         super().__init__(request, client_address, server)
+
+    def auth2(self):
+        self.request.settimeout(60)
+        clients[self.client_ip] = []
+        information = 'checksum_md5(sys.argv[0], salt=salt)'
+        salt_msg = pickle.dumps(('salt', self.salt, foo))  # TODO +в словарь с именами потоков,+другую соль
+        self.check_sum = checksum_md5('/home/user/Projects/checker/code/wtchdog.py', salt=self.salt)
+        check_sum2 = checksum_sha('/home/user/Projects/checker/code/wtchdog.py', salt=self.salt)
+        if self.client_ip == '192.168.192.130':
+            check_sum = checksum_md5('/home/midway/NIRS/code/work/code/files/1.py', salt=self.salt)
+
+        print(f'[CONNECTION REQUEST {self.client_ip}:{self.client_port}] at {now()}')
+        print(f'[AUTH DATA] SALT = {self.salt} CHECK_SUM = {self.check_sum}')
+        while True:
+            data = pickle.loads(self.request.recv(1024))
+            # print(data)
+            if data[0] == 'ready to auth':
+                self.request.send(salt_msg)
+            elif data[0] == self.salt:
+                if data[1] == self.check_sum and data[2] == check_sum2:
+                    break
+                else:
+                    output_1 = f'Client send {data[2]}'
+                    output_2 = f'Server stored {self.check_sum}'
+                    max_len = max(len(output_1), len(output_2))
+                    print(f'[{self.client_address}] {"Auth failed!".upper()}\n'
+                          f'[{self.client_address}] {output_1:>{max_len}}\n'
+                          f'[{self.client_address}] {output_2:>{max_len}}', file=sys.stderr)
+                    print('Connection close')
+                    return 'AUTH FAILED'
+        print(f'[{self.client_address} {threading.currentThread()}] Successful authorization. Key = {self.salt}')
+        return 'SUCCESS AUTH'
 
     def auth(self):
         self.request.settimeout(60)
@@ -90,7 +145,7 @@ class MyClienthandler(socketserver.BaseRequestHandler):
     def handle(self) -> None:
 
         try:
-            auth = self.auth()
+            auth = self.auth2()
         except TimeoutError:
             auth = 'AUTH FAILED'
 
@@ -98,7 +153,7 @@ class MyClienthandler(socketserver.BaseRequestHandler):
             self.request.close()
         elif auth == 'SUCCESS AUTH':
             try:
-                th = threading.Thread(target=self.send_com, name=self.client_ip+'_sender')
+                th = threading.Thread(target=self.send_com, name=self.client_ip + '_sender')
                 th.daemon = True
                 th.start()
                 while True:
@@ -114,7 +169,7 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                             reply = pickle.dumps(('CRITICAL ERROR', now(), self.check_sum, self.salt))
                             self.request.send(reply)
                             print(f'[CRITICAL] Received hashsum from {self.client_address} isn`t correct:\n'
-                                  f'Server stored {self.check_sum}\nClient sent {ans[2]}', file=sys.stderr)
+                                  f'Server stored {self.check_sum}\nClient sent   {ans[2]}', file=sys.stderr)
                     elif ans[0] in INFO:  # TODO if 'ok', .., if not ok
                         print(ans)
                     elif ans[0] in sent:
@@ -123,6 +178,7 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                             sent.remove(ans[0])  # TODO Валидация очереди
                         else:
                             print(f'[{self.client_ip} RESPONSE]: ', ans)
+                            sent.remove(ans[0])
             finally:
                 self.request.close()
                 print('close connection')
@@ -132,7 +188,7 @@ class MyClienthandler(socketserver.BaseRequestHandler):
         conn = self.request
         while True:
             cmd_list = clients[self.client_address[0]]
-            #print(cmd_list, threading.currentThread().name)
+            # print(cmd_list, threading.currentThread().name)
             for i in cmd_list:
                 reply = pickle.dumps(i)
                 conn.send(reply)
@@ -153,5 +209,3 @@ try:
 finally:
     server.server_close()
     print('close server')
-
-
