@@ -4,6 +4,10 @@ import pickle
 import sys
 import threading
 import secrets
+import tkinter as tk
+from tkinter.messagebox import showinfo
+
+import gui.main
 
 myHost = ''
 myPort = 50007
@@ -42,7 +46,7 @@ def checksum_sha(filename, salt=None):
     sha = hashlib.sha256()
     with open(filename, 'rb') as f:
         for chunk in iter(lambda: f.read(8192), b''):
-            sha.update(chunk)e
+            sha.update(chunk)
             if salt:
                 sha.update(salt)
     return sha.hexdigest()
@@ -59,6 +63,9 @@ def send_com(conn):
 
 
 def main_thread():
+    a = serverUI()
+    gui.main.foo()
+    tk.mainloop()
     while True:
         client, *cmd = tuple(x for x in input().strip().split())
         if client in clients:
@@ -70,6 +77,32 @@ def main_thread():
             print(f'This client {client} not found')
         print(clients)
         print('[MAIN THREAD]: list of sent command ', sent)
+
+
+def _main_thread():
+    #main.filemenu.
+    while True:
+        client, *cmd = tuple(x for x in input().strip().split())
+        if client in clients:
+            print('[MAIN THREAD]: cmd added')
+            clients[client].append(('cmd',) + tuple(cmd))
+        elif client.lower() == 'exit':
+            break
+        else:
+            print(f'This client {client} not found')
+        print(clients)
+        print('[MAIN THREAD]: list of sent command ', sent)
+
+
+class serverUI(gui.main.UI):
+
+    def get_list(self):
+        st = ''
+        for i in clients:
+            st += str(i)
+        showinfo('Hosts', st)
+
+    def get_list
 
 
 class MyClienthandler(socketserver.BaseRequestHandler):
