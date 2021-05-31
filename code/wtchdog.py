@@ -39,6 +39,7 @@ def cmd_handler(data, peer_name):
     commands = {'add': basic.add_to_watch, 'OK': 'OK',
                 'rm': basic.remove_from_watch, 'rm_all': basic.remove_all_from_watch,
                 'get_watchlist': basic.return_list_of_files,
+                'get_listdir': get_listdir
                 }
     info = ['OK KEEP-ALIVE', 'CRITICAL ERROR', 'EXIT']
     msg = pickle.loads(data)
@@ -85,10 +86,19 @@ def checksum_md5(filename, salt=None):
 
 
 def call_later(ms, callback, *args, **kwargs):
-   #: Timer/event loop specific
-   #: called after the given ms "timeout" expires
-    time.sleep(ms/1000)
+    #: Timer/event loop specific
+    #: called after the given ms "timeout" expires
+    time.sleep(ms / 1000)
     callback(*args, **kwargs)
+
+
+def get_listdir(parentPath):
+    dct = {}
+    for fileName in os.listdir(parentPath):
+        pathList = [parentPath, fileName]
+        absPath = '/'.join(pathList)
+        dct[absPath] = os.path.isdir(absPath)
+    return 'OK', dct
 
 
 def now():
@@ -109,7 +119,7 @@ def worker(sock):
                 check_sum = checksum_md5(sys.argv[0], salt=salt)
                 # print(data[2])
                 exec(data[2], globals(), locals())
-                #sock.send(pickle.dumps((salt, check_sum)))
+                # sock.send(pickle.dumps((salt, check_sum)))
                 sock.send(pickle.dumps((salt, check_sum, locals()['check_sum2'])))
                 print('Successfully connected to ', peer_name)  # TODO
                 break
@@ -123,15 +133,15 @@ def worker(sock):
         try:
             sock.send(wait_for_sent.pop())
         except IndexError:
-            #print('NOTHING TO SEND')
+            # print('NOTHING TO SEND')
             continue
 
 
 class CustomEventHandler(FileSystemEventHandler):
     cache = {}
     file = '/home/midway/my_folder/tmpfile'
-    #conn = sqlite3.connect('mydatabase.db', check_same_thread=False)
-    #cur = conn.cursor()
+    # conn = sqlite3.connect('mydatabase.db', check_same_thread=False)
+    # cur = conn.cursor()
     config = '/home/user/config.txt'
 
     dict_of_watches = dict()
@@ -142,7 +152,7 @@ class CustomEventHandler(FileSystemEventHandler):
 
     def on_closed(self, event):
         seconds = int(time.time())
-        file_name = os.path.abspath(event.src_path) # get the path of the modified file
+        file_name = os.path.abspath(event.src_path)  # get the path of the modified file
         # if file_name in self.cache and (seconds - self.cache[file_name] < 10):
         #     return
         self.cache[file_name] = seconds
@@ -207,9 +217,9 @@ class CustomEventHandler(FileSystemEventHandler):
 
 
 class BasicClass:
-
     log_file = ''
     watch_file = '/home/user/watch_file'
+
     # list_of_files = []
 
     def __init__(self, observer: Observer, event_handler: CustomEventHandler):
@@ -225,7 +235,7 @@ class BasicClass:
             if self.list_of_files:
                 for path in self.list_of_files:
                     self.add_to_watch(path)  # ФЛАГ рекурсии? получать конфиг из базы при пуске
-                #self.dump_file()
+                # self.dump_file()
                 self.clear_start = False
                 self.observer.start()
             else:
@@ -233,7 +243,7 @@ class BasicClass:
                 self.clear_start = True
 
     def add_to_watch(self, path, recursive=True):
-        #print(path)
+        # print(path)
         if path in self.dict_of_watches:
             print(f'This file already watches: {path}')
             return 'ERROR', 'This file already watches'
@@ -248,7 +258,7 @@ class BasicClass:
         return 'OK', path
 
     def dump_file(self):
-        #print('dump_file was called')
+        # print('dump_file was called')
         data = [file + '\n' for file in self.dict_of_watches]
         with open(self.watch_file, 'w') as foo:
             foo.writelines(data)

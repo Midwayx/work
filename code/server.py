@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter.messagebox import showinfo
 
 import gui.main
+import gui.tree2
 
 myHost = ''
 myPort = 50007
@@ -15,6 +16,7 @@ sent = []
 INFO = ['WARNING-CHANGES']
 
 clients = {}
+resp = {}
 
 
 def now():
@@ -64,7 +66,9 @@ def send_com(conn):
 
 def main_thread():
     a = serverUI()
-    gui.main.foo()
+    # gui.main.foo()
+    b = Tree(a.parent, '')
+    b.update('ghost3')
     tk.mainloop()
     while True:
         client, *cmd = tuple(x for x in input().strip().split())
@@ -80,7 +84,7 @@ def main_thread():
 
 
 def _main_thread():
-    #main.filemenu.
+    # main.filemenu.
     while True:
         client, *cmd = tuple(x for x in input().strip().split())
         if client in clients:
@@ -96,13 +100,59 @@ def _main_thread():
 
 class serverUI(gui.main.UI):
 
-    def get_list(self):
-        st = ''
-        for i in clients:
-            st += str(i)
-        showinfo('Hosts', st)
+    # def get_list(self):
+    #     st = ''
+    #     for i in clients:
+    #         st += str(i)
+    #     showinfo('Hosts', st)
 
-    def get_list
+    def get_list(self):
+        answer = {}
+        q = list()
+        timeout = 5
+        for client in clients:
+            clients[client].append(('cmd', 'get_watchlist', '0'))
+            q.append(client)
+        while q or timeout:
+            for i in q:
+                try:
+                    ans = resp[i]
+                except KeyError:
+                    continue
+                if ('cmd', 'get_watchlist', '0') in ans:
+                    answer[i] = ans[2]
+                    q.remove(i)
+            time.sleep(0.5)
+            timeout -= 0.5
+        output = [str(i) + ': ' + str(answer[i]) for i in answer]
+        showinfo('list', '\n'.join(output))
+
+    def add_file(self):
+        pass
+
+
+class Tree(gui.tree2.App):
+
+    def listdir(self, abspath, client='127.0.0.1'):
+        timeout = 5
+        clients[client].append(('cmd', 'get_listdir', abspath))
+        print('here listdir called')
+        while timeout:
+            time.sleep(0.2)
+            timeout -= 0.2
+            try:
+                answer = resp[self.ghost] # TODO Решить данный вопрос
+            except KeyError:
+                continue
+            if ('cmd', 'get_listdir', abspath) in answer:
+                for i in answer[2]:
+                    if answer[2][i]:
+                        self.dirs.append(i)
+                return answer[2]
+
+    def update(self, client, path='/'):
+        node = self.tree.insert('', 'end', text=client, open=False)
+        self.insert_node(node, path, path)
 
 
 class MyClienthandler(socketserver.BaseRequestHandler):
@@ -190,10 +240,12 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                 th.daemon = True
                 th.start()
                 while True:
-                    data = self.request.recv(1024)  # TODO Похоже, что блокирует цикл
+                    data = self.request.recv(40960)  # TODO Похоже, что блокирует цикл
                     if not data:
                         break
+                    #print(data)
                     ans = pickle.loads(data)
+                    #print(ans)
                     if ans[0] == 'KEEP-ALIVE':
                         if ans[2] == self.check_sum and ans[3] == self.salt:
                             reply = pickle.dumps(('info', 'OK KEEP-ALIVE', now()))
@@ -208,6 +260,7 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                     elif ans[0] in sent:
                         if ans[1] == 'OK':
                             print(f'[{self.client_ip} RESPONSE]: ', ans)
+                            resp[self.client_ip] = ans
                             sent.remove(ans[0])  # TODO Валидация очереди
                         else:
                             print(f'[{self.client_ip} RESPONSE]: ', ans)
