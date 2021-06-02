@@ -16,9 +16,9 @@ def create_list(nt, txt='default'):
 class UI(tk.Frame):
     def __init__(self, parent=None):
         self.parent = tk.Tk()
+        self.parent.minsize('500', '800')  # TODO config
         tk.Frame.__init__(self, parent)
-        self.pack(expand=tk.YES, fill=tk.BOTH)
-        self.start()
+        # self.pack(expand=tk.NO, fill=tk.X, side=tk.TOP)
         self.makeMenuBar()
         self.makeStartPage()
         #self.mainloop()
@@ -29,13 +29,16 @@ class UI(tk.Frame):
     def get_list(self):
         showinfo('Пока не готово', 'скоро будет')
 
+    def get_checked(self):
+        pass
+
     def makeMenuBar(self):
-        main_menu = tk.Menu(self)
+        main_menu = tk.Menu()
         self.parent.config(menu=main_menu)
         file_menu = tk.Menu(main_menu, tearoff=0)
         file_menu.add_command(label='Список узлов', command=self.get_list)
         help_menu = tk.Menu(main_menu, tearoff=0)
-        help_menu.add_command(label='Помощь', command=lambda: showinfo('Очень жаль', 'Тебе ничего не поможет'))
+        help_menu.add_command(label='Помощь', command=self.get_checked)
         main_menu.add_cascade(label='Файл', menu=file_menu)
         main_menu.add_cascade(label='Справка', menu=help_menu)
         #self.mainloop()

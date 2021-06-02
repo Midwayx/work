@@ -1,11 +1,12 @@
 import hashlib
+import os.path
 import socketserver, time
 import pickle
 import sys
 import threading
 import secrets
 import tkinter as tk
-from tkinter.messagebox import showinfo
+from tkinter.messagebox import *
 
 import gui.main
 import gui.tree2
@@ -14,6 +15,7 @@ myHost = ''
 myPort = 50007
 sent = []
 INFO = ['WARNING-CHANGES']
+ALLOWED_HOSTS = {'127.0.0.1': 'ghost1', }
 
 clients = {}
 resp = {}
@@ -65,10 +67,13 @@ def send_com(conn):
 
 
 def main_thread():
+    global b
     a = serverUI()
     # gui.main.foo()
     b = Tree(a.parent, '')
-    b.update('ghost3')
+    a.tree = b
+    # b.update('ghost3')
+    #print(Tree.get_checked)
     tk.mainloop()
     while True:
         client, *cmd = tuple(x for x in input().strip().split())
@@ -84,7 +89,6 @@ def main_thread():
 
 
 def _main_thread():
-    # main.filemenu.
     while True:
         client, *cmd = tuple(x for x in input().strip().split())
         if client in clients:
@@ -100,20 +104,19 @@ def _main_thread():
 
 class serverUI(gui.main.UI):
 
-    # def get_list(self):
-    #     st = ''
-    #     for i in clients:
-    #         st += str(i)
-    #     showinfo('Hosts', st)
+    def __init__(self):
+        self.tree = None
+        super().__init__()
 
-    def get_list(self):
+    @staticmethod
+    def get_list(flag=None, one=None):
         answer = {}
         q = list()
         timeout = 5
         for client in clients:
             clients[client].append(('cmd', 'get_watchlist', '0'))
             q.append(client)
-        while q or timeout:
+        while q and timeout:
             for i in q:
                 try:
                     ans = resp[i]
@@ -122,16 +125,38 @@ class serverUI(gui.main.UI):
                 if ('cmd', 'get_watchlist', '0') in ans:
                     answer[i] = ans[2]
                     q.remove(i)
-            time.sleep(0.5)
-            timeout -= 0.5
+            time.sleep(0.2)
+            timeout -= 0.2
+        if flag:
+            return answer
         output = [str(i) + ': ' + str(answer[i]) for i in answer]
         showinfo('list', '\n'.join(output))
 
     def add_file(self):
         pass
 
+    def get_checked(self):
+        lst = self.tree.get_checked()
+        print(lst)
+        showinfo('checked', str(lst))
+
 
 class Tree(gui.tree2.App):
+
+    def start_up(self, i):
+        abspath = '/'
+        # for i in clients:
+        self.dirs[i] = []
+        self.nodes[i] = {}
+        self.node[i] = {}
+        node = self.tree.insert('', 'end', text=ALLOWED_HOSTS[i], open=False)
+        self.tree.tag_add(node, i)
+        self.nodes[i][node] = abspath
+        print('Node from startup', node)
+        print('Dirs from startup', self.dirs)
+        # nt = self.tree.insert('', 'end', text='ghost2', open=False)
+        self.insert_node(node, abspath, abspath, i)
+        # self.tree.bind('<<TreeviewOpen>>', self.open_node)
 
     def listdir(self, abspath, client='127.0.0.1'):
         timeout = 5
@@ -141,18 +166,61 @@ class Tree(gui.tree2.App):
             time.sleep(0.2)
             timeout -= 0.2
             try:
-                answer = resp[self.ghost] # TODO Решить данный вопрос
+                answer = resp[client]  # TODO Решить данный вопрос
             except KeyError:
                 continue
             if ('cmd', 'get_listdir', abspath) in answer:
                 for i in answer[2]:
                     if answer[2][i]:
-                        self.dirs.append(i)
+                        self.dirs[client].append(i)
                 return answer[2]
 
     def update(self, client, path='/'):
         node = self.tree.insert('', 'end', text=client, open=False)
         self.insert_node(node, path, path)
+
+    def send_checked(self):
+        #client = '127.0.0.1'  # TODO FIX IT
+        checked = self.get_checked()  # TODO add many clients (almost done)
+        current_watchdict = serverUI.get_list(flag=True)
+        errors = {}
+        print(f'[DEBUG] checked={checked}')
+        for client in checked:
+            for i in checked[client]:
+                path = os.path.normpath(i)
+                print('path to add', path)
+                if i not in current_watchdict[client]:
+                    cmd = ('cmd', 'add', path)
+                    clients[client].append(cmd)
+                else:
+                    if client not in errors:
+                        errors[client] = [path]
+                    else:
+                        errors[client].append(path)
+        if errors:
+            a = tk.Toplevel()
+            a.minsize('450', '500')
+            a['bg'] = 'white'
+            #a.overrideredirect(True)
+            msg = f"""# Данные файлы не были добавлены, так как уже отслеживаются: #"""
+            text = tk.Text(a, wrap=tk.WORD)
+            text.insert(tk.INSERT, '#'*len(msg)+'\n'+msg+'\n'+'#'*len(msg)+'\n')
+            for i in errors:
+                text.insert(tk.INSERT, f'HOST {i}:\n')
+                text.insert(tk.INSERT, '\n'.join(errors[i]))
+            text.configure(state='disabled')
+            text.pack(side=tk.LEFT, fill=tk.BOTH, expand=tk.YES)
+            scroll = tk.Scrollbar(command=text.yview)
+            scroll.grid(row=0, column=1, sticky='ns')
+            # scroll.pack(side=tk.LEFT, fill=tk.Y)
+            text.config(yscrollcommand=scroll.set)
+            #tk.Label(a, text=msg).pack(expand=tk.YES, fill=tk.BOTH)
+            # a.bell()
+            #a.after(15000, lambda: a.destroy())
+            return False
+        else:
+            showinfo('Успешно', 'Выбранные файлы успешно добавлены')
+            return True
 
 
 class MyClienthandler(socketserver.BaseRequestHandler):
@@ -226,7 +294,10 @@ class MyClienthandler(socketserver.BaseRequestHandler):
         return 'SUCCESS AUTH'
 
     def handle(self) -> None:
-
+        if self.client_ip not in ALLOWED_HOSTS:
+            self.request.close()
+            exit(0)
+        b.start_up(self.client_ip)
         try:
             auth = self.auth2()
         except TimeoutError:
@@ -240,7 +311,7 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                 th.daemon = True
                 th.start()
                 while True:
-                    data = self.request.recv(40960)  # TODO Похоже, что блокирует цикл
+                    data = self.request.recv(409600)  # TODO Похоже, что блокирует цикл
                     if not data:
                         break
                     #print(data)
