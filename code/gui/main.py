@@ -1,3 +1,4 @@
+import re
 import tkinter as tk
 from tkinter import ttk
 from tkinter.messagebox import showinfo
@@ -26,25 +27,78 @@ class UI(tk.Frame):
     def start(self):
         pass
 
+    def fix_it(self):
+        showinfo('Пока не готово', 'скоро будет')
+
     def get_list(self):
         showinfo('Пока не готово', 'скоро будет')
 
     def get_checked(self):
         pass
-
     def makeMenuBar(self):
         main_menu = tk.Menu()
         self.parent.config(menu=main_menu)
         file_menu = tk.Menu(main_menu, tearoff=0)
-        file_menu.add_command(label='Список узлов', command=self.get_list)
+        hosts_menu = tk.Menu(file_menu, tearoff=0)
         help_menu = tk.Menu(main_menu, tearoff=0)
+        # file_menu.add_command(label='Список узлов', command=self.get_list)
+        # file_menu.add_cascade(label='Список узлов', command=self.get_list)
+        hosts_menu.add_command(label='Добавить узел', command=self.make_dialog_add)
+        hosts_menu.add_command(label='Удалить узел', command=self.fix_it)
+        hosts_menu.add_command(label='Список узлов', command=self.get_list)
         help_menu.add_command(label='Помощь', command=self.get_checked)
         main_menu.add_cascade(label='Файл', menu=file_menu)
         main_menu.add_cascade(label='Справка', menu=help_menu)
+        file_menu.add_cascade(label='Узлы', menu=hosts_menu)
         #self.mainloop()
 
     def makeStartPage(self):
         pass
+
+    def add_host(self):
+        pass
+    def make_dialog_add(self):
+        dialog = tk.Toplevel(self.parent)
+        dialog.width = 600
+        dialog.height = 100
+
+        self.ip = tk.StringVar()
+        self.name = tk.StringVar()
+
+        frame = tk.Frame(dialog, bg='#42c2f4', bd=5)
+        frame.grid()
+        ip_label = tk.Label(frame, text='Введите ip_v4 адресс узла')
+        name_label = tk.Label(frame, text='Введите имя узла')
+
+        name_label.grid(row=0, column=0, sticky='w')
+        ip_label.grid(row=1, column=0, sticky='w')
+
+        self.pattern = re.compile(r"((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)")
+
+        vcmd = (frame.register(self.validate_ip), "%i", "%P")
+        name_entry = tk.Entry(frame, textvariable=self.name)
+        ip_entry = tk.Entry(frame, textvariable=self.ip, validate="focusout",
+                            validatecommand=vcmd,
+                            invalidcommand=self.print_error)
+        name_entry.grid(row=0, column=1, padx=5, pady=5)
+        ip_entry.grid(row=1, column=1, padx=5, pady=5)
+
+        message_button = tk.Button(frame, text="send", command=self.send_cmd)
+        message_button.grid(row=2, column=1, padx=5, pady=5, sticky="e")
+
+
+    def validate_ip(self, index, ip):
+        # print("Проверка символа" + index)
+        return self.pattern.match(ip) is not None
+
+    def print_error(self):
+        print("Запрещенный символ в логине")
+
+    def send_cmd(self):
+        if self.ip:
+            print('удача')
+
+
 
 
 # root window

@@ -6,6 +6,7 @@ import sys
 import threading
 import secrets
 import tkinter as tk
+import tkinter.ttk as ttk
 from tkinter.messagebox import *
 
 import gui.main
@@ -16,6 +17,8 @@ myPort = 50007
 sent = []
 INFO = ['WARNING-CHANGES']
 ALLOWED_HOSTS = {'127.0.0.1': 'ghost1', }
+CONNECTED_HOSTS = {}
+HOSTS_UNDER_CONTROL = {}
 
 clients = {}
 resp = {}
@@ -23,6 +26,16 @@ resp = {}
 
 def now():
     return time.ctime(time.time())
+
+
+def valid_ipv4(ip):
+    lst = ip.split('.')
+    if len(lst) != 4:
+        return False
+    for i in lst:
+        if int(i) > 255 or int(i) < 0:
+            return False
+    return True
 
 
 def checksum_md5(filename, salt=None):
@@ -149,9 +162,13 @@ class Tree(gui.tree2.App):
         self.dirs[i] = []
         self.nodes[i] = {}
         self.node[i] = {}
-        node = self.tree.insert('', 'end', text=ALLOWED_HOSTS[i], open=False)
+        node = self.tree.insert('', 'end', text=ALLOWED_HOSTS[i], open=False, values=('подключен', 'целостность не нарушена', 'отслеживается'))
+        self.parent_nodes[i] = node
         self.tree.tag_add(node, i)
+        self.tree.tag_add(node, 'ghost')
+        # self.tree.tag_add(node, 'disabled')
         self.nodes[i][node] = abspath
+        self.node[i][node] = abspath
         print('Node from startup', node)
         print('Dirs from startup', self.dirs)
         # nt = self.tree.insert('', 'end', text='ghost2', open=False)
@@ -166,7 +183,7 @@ class Tree(gui.tree2.App):
             time.sleep(0.2)
             timeout -= 0.2
             try:
-                answer = resp[client]  # TODO Решить данный вопрос
+                answer = resp[client]  # TODO Решить данный вопрос с наслоением ответов
             except KeyError:
                 continue
             if ('cmd', 'get_listdir', abspath) in answer:
@@ -210,10 +227,10 @@ class Tree(gui.tree2.App):
                 text.insert(tk.INSERT, '\n'.join(errors[i]))
             text.configure(state='disabled')
             text.pack(side=tk.LEFT, fill=tk.BOTH, expand=tk.YES)
-            scroll = tk.Scrollbar(command=text.yview)
-            scroll.grid(row=0, column=1, sticky='ns')
-            # scroll.pack(side=tk.LEFT, fill=tk.Y)
-            text.config(yscrollcommand=scroll.set)
+            # scroll = tk.Scrollbar(command=text.yview)
+            # scroll.grid(row=0, column=1, sticky='ns')
+            # # scroll.pack(side=tk.LEFT, fill=tk.Y)
+            # text.config(yscrollcommand=scroll.set)
             #tk.Label(a, text=msg).pack(expand=tk.YES, fill=tk.BOTH)
             # a.bell()
             #a.after(15000, lambda: a.destroy())
@@ -221,6 +238,22 @@ class Tree(gui.tree2.App):
         else:
             showinfo('Успешно', 'Выбранные файлы успешно добавлены')
             return True
+
+    def toggle_1(self, parent):
+        if self.var.get() == 'Unlocked':
+            for i in self.tree.get_children(parent):
+                if self.tree.tag_has('disabled', i):
+                    self.tree.tag_del(i, 'disabled')
+                    self.toggle_1(i)
+        else:
+            for i in self.tree.get_children(parent):
+                if not self.tree.tag_has('disabled', i):
+                    self.tree.tag_add(i, 'disabled')
+                    self.toggle_1(i)
+
+    def toggle(self):   # TODO Recursion!
+        for i in self.parent_nodes:
+            self.toggle_1(self.parent_nodes[i])
 
 
 class MyClienthandler(socketserver.BaseRequestHandler):
