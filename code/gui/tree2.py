@@ -19,7 +19,8 @@ class CheckBoxTreeview(CheckboxTreeview):
         CheckboxTreeview.__init__(self, master, **kw)
         # disabled tag to mar disabled items
         self.tag_configure("disabled", foreground='grey')
-        self.tag_configure("ghost", foreground='#118515', font=('Arial', 12))
+        self.tag_configure("ghost", foreground='#118515', font=('Consolas', 12))
+        self.tag_configure('disconnected', foreground='red', font=('Consolas', 12))
 
     def _box_click(self, event):
         """Check or uncheck box when clicked."""
@@ -95,31 +96,46 @@ class App(object):
         self.tree.bind('<<TreeviewOpen>>', self.open_node)
         # self.tree.bind('')
 
-    def insert_node(self, parent, text, abspath, client):
-        self.call_client = client
-        print(f'abspath {abspath} client {client}')
+    def insert_node(self, parent, text, abspath):
+
+        tags = self.tree.item(parent)['tags']  # TODO validation ip
+        client_ip = None
+        for tag in tags:
+            if valid_ipv4(tag):
+                client_ip = tag
+        print(f'abspath {abspath} client {client_ip}')
         node = self.tree.insert(parent, 'end', text=text, open=False)
-        self.tree.tag_add(node, client)
+        self.tree.tag_add(node, client_ip)
         if self.var.get() == 'Locked':
             self.tree.tag_add(node, 'disabled')
         print(self.tree.item(node))
         print('node', node)
-        self.node[client][node] = abspath
-        if abspath in self.dirs[client]:
-            self.nodes[client][node] = abspath
+        self.node[client_ip][node] = abspath
+        if abspath in self.dirs[client_ip]:
+            self.nodes[client_ip][node] = abspath
             self.tree.insert(node, 'end')
 
     def open_node(self, event):
-        print(f'[open node] call_client, {self.call_client}')
         node = self.tree.focus()
+        print('open-node called')
+        if self.tree.tag_has('disconnected', node):
+            return
+        tags = self.tree.item(node)['tags']  # TODO validation ip
+        client_ip = None
+        for tag in tags:
+            if valid_ipv4(tag):
+                client_ip = tag
+                # self.call_client=client_ip
+
+        print(f'[open node] call_client, {client_ip}')
         print('[open node] focus_node', node)
         print(self.nodes)
-        abspath = self.nodes[self.call_client].pop(node, None)
+        abspath = self.nodes[client_ip].pop(node, None)
         print('abspath poped', abspath)
         if abspath:
             self.tree.delete(self.tree.get_children(node))
-            for p in self.listdir(abspath, self.call_client):
-                self.insert_node(node, os.path.split(p)[1], p, self.call_client)
+            for p in self.listdir(abspath, client_ip):  # TODO  или как-то переписать листдир для загрузки из конфига?
+                self.insert_node(node, os.path.split(p)[1], p)
 
     def listdir(self, abspath, host=None):
         return "MOCK"

@@ -1,7 +1,7 @@
 import re
 import tkinter as tk
 from tkinter import ttk
-from tkinter.messagebox import showinfo
+from tkinter.messagebox import *
 
 
 def create_list(nt, txt='default'):
@@ -57,49 +57,74 @@ class UI(tk.Frame):
 
     def add_host(self):
         pass
+
     def make_dialog_add(self):
-        dialog = tk.Toplevel(self.parent)
-        dialog.width = 600
-        dialog.height = 100
+        self.dialog = tk.Toplevel(self.parent)
+        self.dialog.title('Добавить узел')
+        self.dialog.minsize('400', '120')
+        self.dialog.width = 600
+        self.dialog.height = 120
+        self.dialog.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
 
         self.ip = tk.StringVar()
         self.name = tk.StringVar()
 
-        frame = tk.Frame(dialog, bg='#42c2f4', bd=5)
-        frame.grid()
-        ip_label = tk.Label(frame, text='Введите ip_v4 адресс узла')
-        name_label = tk.Label(frame, text='Введите имя узла')
+        #frame = tk.Frame(dialog, bg='#42c2f4', bd=5)
+        frame = tk.Frame(self.dialog, bd=5)
+        frame.grid(sticky=tk.NSEW)
+        frame.grid_columnconfigure(0, weight=1)
+        frame.grid_rowconfigure(0, weight=1)
+        ip_label = tk.Label(frame, text='Введите IPv4 адресс узла:')
+        name_label = tk.Label(frame, text='Введите имя узла:')
 
         name_label.grid(row=0, column=0, sticky='w')
         ip_label.grid(row=1, column=0, sticky='w')
 
-        self.pattern = re.compile(r"((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)")
+        self.pattern = re.compile(
+            r"^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$")
 
         vcmd = (frame.register(self.validate_ip), "%i", "%P")
         name_entry = tk.Entry(frame, textvariable=self.name)
-        ip_entry = tk.Entry(frame, textvariable=self.ip, validate="focusout",
+        ip_entry = tk.Entry(frame, textvariable=self.ip, validate="focus",
                             validatecommand=vcmd,
                             invalidcommand=self.print_error)
         name_entry.grid(row=0, column=1, padx=5, pady=5)
         ip_entry.grid(row=1, column=1, padx=5, pady=5)
 
-        message_button = tk.Button(frame, text="send", command=self.send_cmd)
-        message_button.grid(row=2, column=1, padx=5, pady=5, sticky="e")
+        self.message_button = tk.Button(frame, text="send", command=self.send_cmd, state='normal')
+        self.message_button.grid(row=2, column=1, padx=5, pady=5, sticky="e")
 
+        self.label_valid = tk.Label(frame, text='')
+        self.label_valid.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky='w')
+
+        self.message_button_var = tk.StringVar()
+        # self.message_button_var.set('Invalid')
 
     def validate_ip(self, index, ip):
-        # print("Проверка символа" + index)
-        return self.pattern.match(ip) is not None
+        if self.pattern.match(ip) is not None:
+            self.message_button_var.set('Valid')
+            # self.message_button.configure(state='active')
+            return True
+        self.message_button_var.set('Invalid')
+        # self.message_button.configure(state='disabled')
+        return False
 
     def print_error(self):
-        print("Запрещенный символ в логине")
+        # print("Запрещенный символ в логине")
+        pass
 
     def send_cmd(self):
-        if self.ip:
-            print('удача')
-
-
-
+        print(self.message_button_var.get())
+        if self.validate_ip('0', self.ip.get()):
+            print(self.message_button_var.get())
+            self.dialog.after(1500, lambda: self.dialog.destroy())
+            showinfo('Добавлено', 'Узел успешно добавлен')
+            print('Удача')
+        else:
+            self.label_valid.configure(text='Invalid IPv4 address. Try again.')
+            self.label_valid.after(5500, lambda: self.label_valid.configure(text=''))
+            # showinfo('Invalid IPv4', 'You input invalid ipV4 address.\ntry again')
 
 # root window
 # root = tk.Tk()

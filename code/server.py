@@ -1,6 +1,8 @@
 import hashlib
 import os.path
 import socketserver, time
+from functools import reduce
+from pathlib import PurePosixPath
 import pickle
 import sys
 import threading
@@ -19,6 +21,7 @@ INFO = ['WARNING-CHANGES']
 ALLOWED_HOSTS = {'127.0.0.1': 'ghost1', }
 CONNECTED_HOSTS = {}
 HOSTS_UNDER_CONTROL = {}
+CONFIG_FILE = '/home/user/Projects/checker/code/files/psv-config.txt'
 
 clients = {}
 resp = {}
@@ -81,24 +84,30 @@ def send_com(conn):
 
 def main_thread():
     global b
+    # /home/user/
     a = serverUI()
     # gui.main.foo()
     b = Tree(a.parent, '')
     a.tree = b
+    b.load_config()
+    b.load_tree()
     # b.update('ghost3')
     #print(Tree.get_checked)
     tk.mainloop()
-    while True:
-        client, *cmd = tuple(x for x in input().strip().split())
-        if client in clients:
-            print('[MAIN THREAD]: cmd added')
-            clients[client].append(('cmd',) + tuple(cmd))
-        elif client.lower() == 'exit':
-            break
-        else:
-            print(f'This client {client} not found')
-        print(clients)
-        print('[MAIN THREAD]: list of sent command ', sent)
+    # while True:
+    #     if input('gui\n') == 'gui':
+    #
+    # while True:
+    #     client, *cmd = tuple(x for x in input().strip().split())
+    #     if client in clients:
+    #         print('[MAIN THREAD]: cmd added')
+    #         clients[client].append(('cmd',) + tuple(cmd))
+    #     elif client.lower() == 'exit':
+    #         break
+    #     else:
+    #         print(f'This client {client} not found')
+    #     print(clients)
+    #     print('[MAIN THREAD]: list of sent command ', sent)
 
 
 def _main_thread():
@@ -172,8 +181,41 @@ class Tree(gui.tree2.App):
         print('Node from startup', node)
         print('Dirs from startup', self.dirs)
         # nt = self.tree.insert('', 'end', text='ghost2', open=False)
-        self.insert_node(node, abspath, abspath, i)
+        self.insert_node(node, abspath, abspath)
         # self.tree.bind('<<TreeviewOpen>>', self.open_node)
+
+    def load_config(self):
+        self.backup_tree = {}
+        self.config = {}
+        try:
+            with open(CONFIG_FILE, 'rb') as f:
+                self.config = pickle.load(f)
+        except:
+            pass
+        for host in self.config:
+            self.backup_tree[host] = {}
+            paths = self.config[host]['watched_files']
+            for path in map(PurePosixPath, paths):
+                reduce(lambda node, part: node.setdefault(part, {}), path.parts[1:], self.backup_tree[host])
+            print('backup-tree', self.backup_tree)
+
+    def load_tree(self):
+        for host in self.backup_tree:
+            node = self.tree.insert('', 'end', text=host, open=False, value=('NOT_CONNECTED', '-', '-'))
+            host_ip = self.config[host]['ip']
+            self.tree.tag_add(node, host_ip)
+            # self.tree.tag_add(node, 'ghost')
+            self.tree.tag_add(node, 'disconnected')
+            # for part in self.backup_tree[host]:
+                #node = self.tree.insert(node, 'end', text=part, open=False)
+            self._load_tree(self.backup_tree[host], node)
+
+    def _load_tree(self, parent, iid):
+        print(parent, iid)
+        for i in parent:
+            node = self.tree.insert(iid, 'end', text=i, open=False, )
+            self.tree.tag_add(node, 'disconnected')
+            self._load_tree(parent[i], node)
 
     def listdir(self, abspath, client='127.0.0.1'):
         timeout = 5
@@ -197,7 +239,7 @@ class Tree(gui.tree2.App):
         self.insert_node(node, path, path)
 
     def send_checked(self):
-        #client = '127.0.0.1'  # TODO FIX IT
+        #client = '127.0.0.1'  # TODO Перенести в main app?
         checked = self.get_checked()  # TODO add many clients (almost done)
         current_watchdict = serverUI.get_list(flag=True)
         errors = {}
@@ -214,6 +256,7 @@ class Tree(gui.tree2.App):
                         errors[client] = [path]
                     else:
                         errors[client].append(path)
+        self.save_checked()
         if errors:
             a = tk.Toplevel()
             a.minsize('450', '500')
@@ -238,6 +281,15 @@ class Tree(gui.tree2.App):
         else:
             showinfo('Успешно', 'Выбранные файлы успешно добавлены')
             return True
+
+    def save_checked(self):
+        selected = self.get_checked()
+        for client_ip in selected:
+            client_name = ALLOWED_HOSTS[client_ip]
+            self.config[client_name] = {'ip': client_ip, 'watched_files': selected[client_ip]}
+        print(self.config)
+        with open(CONFIG_FILE, 'wb') as f:
+            pickle.dump(self.config, f)
 
     def toggle_1(self, parent):
         if self.var.get() == 'Unlocked':
