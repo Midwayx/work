@@ -142,11 +142,11 @@ class CustomEventHandler(FileSystemEventHandler):
     file = '/home/midway/my_folder/tmpfile'
     # conn = sqlite3.connect('mydatabase.db', check_same_thread=False)
     # cur = conn.cursor()
-    config = '/home/user/config.txt'
+    config = '/home/midway/config.txt'
 
     dict_of_watches = dict()
     log_file = ''
-    watch_file = '/home/user/watch_file'
+    watch_file = '/home/midway/watch_file'
     list_of_files = []
     update_config = False
 
@@ -218,7 +218,7 @@ class CustomEventHandler(FileSystemEventHandler):
 
 class BasicClass:
     log_file = ''
-    watch_file = '/home/user/watch_file'
+    watch_file = '/home/midway/watch_file'
 
     # list_of_files = []
 

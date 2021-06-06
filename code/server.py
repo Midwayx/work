@@ -21,7 +21,7 @@ INFO = ['WARNING-CHANGES']
 ALLOWED_HOSTS = {'127.0.0.1': 'ghost1', }
 CONNECTED_HOSTS = {}
 HOSTS_UNDER_CONTROL = {}
-CONFIG_FILE = '/home/user/Projects/checker/code/files/psv-config.txt'
+CONFIG_FILE = '/home/midway/NIRS/code/work/code/files/psv-config.txt'
 
 clients = {}
 resp = {}
@@ -162,6 +162,14 @@ class serverUI(gui.main.UI):
         print(lst)
         showinfo('checked', str(lst))
 
+    def add_host(self, ip, name):
+        if ip not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS[ip] = name
+            return True, 0
+        else:
+            return False, ALLOWED_HOSTS[ip]
+
+
 
 class Tree(gui.tree2.App):
 
@@ -190,8 +198,9 @@ class Tree(gui.tree2.App):
         try:
             with open(CONFIG_FILE, 'rb') as f:
                 self.config = pickle.load(f)
-        except:
-            pass
+        except Exception as e:
+            print(e)
+
         for host in self.config:
             self.backup_tree[host] = {}
             paths = self.config[host]['watched_files']
@@ -233,6 +242,7 @@ class Tree(gui.tree2.App):
                     if answer[2][i]:
                         self.dirs[client].append(i)
                 return answer[2]
+        return ['...']  # TODO call timeout error message
 
     def update(self, client, path='/'):
         node = self.tree.insert('', 'end', text=client, open=False)
@@ -264,9 +274,9 @@ class Tree(gui.tree2.App):
             #a.overrideredirect(True)
             msg = f"""# Данные файлы не были добавлены, так как уже отслеживаются: #"""
             text = tk.Text(a, wrap=tk.WORD)
-            text.insert(tk.INSERT, '#'*len(msg)+'\n'+msg+'\n'+'#'*len(msg)+'\n')
+            text.insert(tk.INSERT, '#'*len(msg)+'\n'+msg+'\n'+'#'*len(msg))
             for i in errors:
-                text.insert(tk.INSERT, f'HOST {i}:\n')
+                text.insert(tk.INSERT, f'\nHOST {i}:\n')
                 text.insert(tk.INSERT, '\n'.join(errors[i]))
             text.configure(state='disabled')
             text.pack(side=tk.LEFT, fill=tk.BOTH, expand=tk.YES)
@@ -282,7 +292,7 @@ class Tree(gui.tree2.App):
             showinfo('Успешно', 'Выбранные файлы успешно добавлены')
             return True
 
-    def save_checked(self):
+    def save_checked(self):  # TODO fix to save_config
         selected = self.get_checked()
         for client_ip in selected:
             client_name = ALLOWED_HOSTS[client_ip]
@@ -321,11 +331,11 @@ class MyClienthandler(socketserver.BaseRequestHandler):
         clients[self.client_ip] = []
         information = 'checksum_md5(sys.argv[0], salt=salt)'
         salt_msg = pickle.dumps(('salt', self.salt, foo))  # TODO +в словарь с именами потоков,+другую соль
-        self.check_sum = checksum_md5('/home/user/Projects/checker/code/wtchdog.py', salt=self.salt)
-        check_sum2 = checksum_sha('/home/user/Projects/checker/code/wtchdog.py', salt=self.salt)
+        self.check_sum = checksum_md5('/home/midway/NIRS/code/work/code/wtchdog.py', salt=self.salt)
+        check_sum2 = checksum_sha('/home/midway/NIRS/code/work/code/wtchdog.py', salt=self.salt)
         if self.client_ip == '192.168.192.130':
-            check_sum = checksum_md5('/home/midway/NIRS/code/work/code/files/1.py', salt=self.salt)
-
+            self.check_sum = checksum_md5('/home/midway/NIRS/code/work/code/files/1.py', salt=self.salt)
+            check_sum2 = checksum_sha('/home/midway/NIRS/code/work/code/files/1.py', salt=self.salt)
         print(f'[CONNECTION REQUEST {self.client_ip}:{self.client_port}] at {now()}')
         print(f'[AUTH DATA] SALT = {self.salt} CHECK_SUM = {self.check_sum}')
         while True:
@@ -344,6 +354,7 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                           f'[{self.client_address}] {output_1:>{max_len}}\n'
                           f'[{self.client_address}] {output_2:>{max_len}}', file=sys.stderr)
                     print('Connection close')
+
                     return 'AUTH FAILED'
         print(f'[{self.client_address} {threading.currentThread()}] Successful authorization. Key = {self.salt}')
         return 'SUCCESS AUTH'

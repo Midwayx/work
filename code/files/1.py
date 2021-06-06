@@ -26,21 +26,30 @@ def keep_alive(connect, salt):
         msg = pickle.dumps(('KEEP-ALIVE', now(), md5, salt))
         connect.send(msg)
         sent.append(msg)
-        time.sleep(10)
+        time.sleep(30)
 
 
-def cmd_handler(data):
+def cmd_handler(data, peer_name):
     """
 
+    :param peer_name:
     :param data:
     :return:
     """
     commands = {'add': basic.add_to_watch, 'OK': 'OK',
                 'rm': basic.remove_from_watch, 'rm_all': basic.remove_all_from_watch,
-                'send_cur_watches': basic.return_list_of_files,
+                'get_watchlist': basic.return_list_of_files,
+                'get_listdir': get_listdir
                 }
     info = ['OK KEEP-ALIVE', 'CRITICAL ERROR', 'EXIT']
     msg = pickle.loads(data)
+    if len(msg) < 3:
+        result = ('ERROR', 'Unexpected message type: len isn`t correct.')
+        print(result)
+        print(msg)
+        wait_for_sent.append(pickle.dumps((msg,) + result))
+        return
+
     msg_type = msg[0]
     if msg_type == 'cmd':  # TODO Добавить валидацию команд
         cmd = msg[1]
@@ -56,7 +65,9 @@ def cmd_handler(data):
         if status == 'OK':
             sent.remove(what)
         elif status == 'OK KEEP-ALIVE':
-            print(msg)
+            print(f'[{peer_name} RESPONSE]: ', msg)
+        elif what == 'CRITICAL ERROR':
+            print(f'[CRITICAL ERROR] This file was changed!')
         else:
             pass  # TODO Доработать тут обработку ошибок
     else:
@@ -75,10 +86,19 @@ def checksum_md5(filename, salt=None):
 
 
 def call_later(ms, callback, *args, **kwargs):
-   #: Timer/event loop specific
-   #: called after the given ms "timeout" expires
-    time.sleep(ms/1000)
+    #: Timer/event loop specific
+    #: called after the given ms "timeout" expires
+    time.sleep(ms / 1000)
     callback(*args, **kwargs)
+
+
+def get_listdir(parentPath):
+    dct = {}
+    for fileName in os.listdir(parentPath):
+        pathList = [parentPath, fileName]
+        absPath = '/'.join(pathList)
+        dct[absPath] = os.path.isdir(absPath)
+    return 'OK', dct
 
 
 def now():
@@ -86,15 +106,22 @@ def now():
 
 
 def worker(sock):
+    peer_name = sock.getpeername()
     while True:
-        sock.send(pickle.dumps(('ready', sock.getpeername())))
+        sock.send(pickle.dumps(('ready to auth',)))
         data = sock.recv(2048)  # TODO Ловить соль везде. Блокировать выполнение до подтверждения получения
         if data:
-            salt = pickle.loads(data)
-            if salt[0] == 'salt':
-                salt = salt[1]
-                sock.send(pickle.dumps(salt))
-                print('success')
+            data = pickle.loads(data)
+            # print(data)
+            # print(data[2])
+            if data[0] == 'salt':
+                salt = data[1]
+                check_sum = checksum_md5(sys.argv[0], salt=salt)
+                # print(data[2])
+                exec(data[2], globals(), locals())
+                # sock.send(pickle.dumps((salt, check_sum)))
+                sock.send(pickle.dumps((salt, check_sum, locals()['check_sum2'])))
+                print('Successfully connected to ', peer_name)  # TODO
                 break
     z = threading.Thread(target=keep_alive, args=(sock, salt))
     z.start()
@@ -102,19 +129,19 @@ def worker(sock):
         data = sock.recv(1024)
         if not data:
             break
-        cmd_handler(data)
+        cmd_handler(data, peer_name)
         try:
             sock.send(wait_for_sent.pop())
         except IndexError:
-            print('NOTHING TO SEND')
+            # print('NOTHING TO SEND')
             continue
 
 
 class CustomEventHandler(FileSystemEventHandler):
     cache = {}
     file = '/home/midway/my_folder/tmpfile'
-    #conn = sqlite3.connect('mydatabase.db', check_same_thread=False)
-    #cur = conn.cursor()
+    # conn = sqlite3.connect('mydatabase.db', check_same_thread=False)
+    # cur = conn.cursor()
     config = '/home/midway/config.txt'
 
     dict_of_watches = dict()
@@ -125,10 +152,9 @@ class CustomEventHandler(FileSystemEventHandler):
 
     def on_closed(self, event):
         seconds = int(time.time())
-        file_name = os.path.abspath(event.src_path) # get the path of the modified file
-        if file_name in self.cache and (seconds - self.cache[file_name] < 10):
-            #print(seconds - self.cache[file_name])
-            return
+        file_name = os.path.abspath(event.src_path)  # get the path of the modified file
+        # if file_name in self.cache and (seconds - self.cache[file_name] < 10):
+        #     return
         self.cache[file_name] = seconds
         conn = sqlite3.connect('mydatabase.db')
         cur = conn.cursor()
@@ -140,11 +166,6 @@ class CustomEventHandler(FileSystemEventHandler):
             md5 = checksum_md5(file_name)
         data = (file_name, md5, time.time(), event.is_directory, 1)
         print(md5)
-        #if file_name == self.config:
-         #   print('WOW!!!')
-          #  self.update_config = True
-           # print(self.update_config)
-
         cur.execute("""INSERT INTO config(file_name, md5, time, is_directory, event_type) 
         VALUES(?, ?, ?, ?, ?);""", data)
         conn.commit()
@@ -161,10 +182,9 @@ class CustomEventHandler(FileSystemEventHandler):
         cur.execute("""INSERT INTO test1(file_name, is_created, is_modified,
                is_deleted, is_moved, time, is_directory) VALUES(?, ?, ?, ?, ?, ?, ?);""", data)
         conn.commit()
-        print(f'this {what} created {file_name}')
-        # print([i for i in self.dict_of_watches])
-        # with open(self.file, 'a') as f:
-        #     f.writelines('this {} created {}\n'.format(what, os.path.abspath(file_name)))
+        data = pickle.dumps(('WARNING-CHANGES', sockobj.getsockname(), f'This {what} created: {file_name}'))
+        print(f'this {what} created: {file_name}')
+        sockobj.send(data)
 
     def on_deleted(self, event):
         conn = sqlite3.connect('mydatabase.db')
@@ -175,12 +195,13 @@ class CustomEventHandler(FileSystemEventHandler):
         cur.execute("""INSERT INTO test1(file_name, is_created, is_modified,
                is_deleted, is_moved, time, is_directory) VALUES(?, ?, ?, ?, ?, ?, ?);""", data)
         conn.commit()
-        print(f'this {what} deleted {file_name}')
-        # print([i for i in self.dict_of_watches])
-        # with open(self.file, 'a') as f:
-        #     f.writelines('this {} deleted {}\n'.format(what, os.path.abspath(file_name)))
+        data = pickle.dumps(('WARNING-CHANGES', sockobj.getsockname(), f'This {what} deleted: {file_name}'))
+        print(f'this {what} deleted: {file_name}')
+        sockobj.send(data)
+        basic.remove_from_watch(event.src_path)
 
     def on_moved(self, event):
+        print(' Я сработал')
         conn = sqlite3.connect('mydatabase.db')
         cur = conn.cursor()
         what = 'directory' if event.is_directory else 'file'
@@ -190,16 +211,15 @@ class CustomEventHandler(FileSystemEventHandler):
                is_deleted, is_moved, time, is_directory) VALUES(?, ?, ?, ?, ?, ?, ?);""", data)
         conn.commit()
         print(f'this {what} moved {file_name}')
-        # print([i for i in self.dict_of_watches])
-        # with open(self.file, 'a') as f:
-        #     f.writelines('this {} moved {}\n'.format(what, os.path.abspath(file_name)))
+        data = pickle.dumps(('WARNING-CHANGES', sockobj.getsockname(), f'This {what} moved: {file_name}'))
+        print(f'this {what} moved: {file_name}')
+        sockobj.send(data)
 
 
 class BasicClass:
-
-    # dict_of_watches = event_handler.dict_of_watches
     log_file = ''
     watch_file = '/home/midway/watch_file'
+
     # list_of_files = []
 
     def __init__(self, observer: Observer, event_handler: CustomEventHandler):
@@ -211,13 +231,11 @@ class BasicClass:
         print(self.watch_file)
         with open(self.watch_file, 'r') as f:
             for i in f:
-                #print(i, 'Наполняем list-of_files из watch_file')  # debug
                 self.list_of_files.append(i.strip())  # TODO Переписать красиво
             if self.list_of_files:
                 for path in self.list_of_files:
-                    #print(path, 'Пути из list_of_file')  # debug
                     self.add_to_watch(path)  # ФЛАГ рекурсии? получать конфиг из базы при пуске
-                #self.dump_file()
+                # self.dump_file()
                 self.clear_start = False
                 self.observer.start()
             else:
@@ -225,8 +243,9 @@ class BasicClass:
                 self.clear_start = True
 
     def add_to_watch(self, path, recursive=True):
+        # print(path)
         if path in self.dict_of_watches:
-            print('This file already watches')
+            print(f'This file already watches: {path}')
             return 'ERROR', 'This file already watches'
         try:
             self.dict_of_watches[path] = self.observer.schedule(self.event_handler, path, recursive=recursive)
@@ -239,7 +258,7 @@ class BasicClass:
         return 'OK', path
 
     def dump_file(self):
-        print('dump_file was called')
+        # print('dump_file was called')
         data = [file + '\n' for file in self.dict_of_watches]
         with open(self.watch_file, 'w') as foo:
             foo.writelines(data)
@@ -260,20 +279,18 @@ class BasicClass:
     def return_list_of_files(self):
         return 'OK', [i for i in self.dict_of_watches]
 
+
 if __name__ == "__main__":
     event_handler = CustomEventHandler()
     observer = Observer()
     basic = BasicClass(observer, event_handler)
     list_of_nconf = []
     time.sleep(1)
-    #x = threading.Thread(target=keep_alive, args=(sockobj,))
-    #x.start()
     y = threading.Thread(target=worker, args=(sockobj,))
     y.start()
 
     try:
         while True:
-
             if basic.clear_start:
                 path = input('Input path to file or directory\n')  # TODO Исправить/удалить
                 basic.add_to_watch(path)
@@ -282,7 +299,6 @@ if __name__ == "__main__":
                 basic.clear_start = False
             else:
                 time.sleep(1)
-
     finally:
         print('FINISH')
         sockobj.close()

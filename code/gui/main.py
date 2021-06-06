@@ -55,8 +55,8 @@ class UI(tk.Frame):
     def makeStartPage(self):
         pass
 
-    def add_host(self):
-        pass
+    def add_host(self, ip, name):
+        return False, 'Error!'
 
     def make_dialog_add(self):
         self.dialog = tk.Toplevel(self.parent)
@@ -119,8 +119,11 @@ class UI(tk.Frame):
         if self.validate_ip('0', self.ip.get()):
             print(self.message_button_var.get())
             self.dialog.after(1500, lambda: self.dialog.destroy())
-            showinfo('Добавлено', 'Узел успешно добавлен')
-            print('Удача')
+            status = self.add_host(self.ip.get(), self.name.get())
+            if status[0]:
+                showinfo('Добавлено', 'Узел успешно добавлен')
+            else:
+                showwarning('Внимание!', f'Данный узел уже добавлен как {status[1]}')
         else:
             self.label_valid.configure(text='Invalid IPv4 address. Try again.')
             self.label_valid.after(5500, lambda: self.label_valid.configure(text=''))
