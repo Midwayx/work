@@ -41,6 +41,7 @@ class CheckBoxTreeview(CheckboxTreeview):
 
 class App(object):
     def __init__(self, master, path):
+        self.config = {}
         self.ghost = '127.0.0.1'
         self.dirs = {}
         self.nodes = dict()
@@ -114,6 +115,7 @@ class App(object):
         if abspath in self.dirs[client_ip]:
             self.nodes[client_ip][node] = abspath
             self.tree.insert(node, 'end')
+        return node
 
     def open_node(self, event):
         node = self.tree.focus()
@@ -132,10 +134,19 @@ class App(object):
         print(self.nodes)
         abspath = self.nodes[client_ip].pop(node, None)
         print('abspath poped', abspath)
+        dictdir = {}
         if abspath:
             self.tree.delete(self.tree.get_children(node))
             for p in self.listdir(abspath, client_ip):  # TODO  или как-то переписать листдир для загрузки из конфига?
-                self.insert_node(node, os.path.split(p)[1], p)
+                dictdir[p] = self.insert_node(node, os.path.split(p)[1], p)
+
+        for abspath in dictdir:
+            print(abspath, dictdir)
+            if abspath in self.config[client_ip]['watched_files']:
+                # self.tree.change_state(node, 'checked')
+                self.tree._check_ancestor(dictdir[abspath])
+                self.tree._check_descendant(dictdir[abspath])
+
 
     def listdir(self, abspath, host=None):
         return "MOCK"

@@ -163,11 +163,15 @@ class serverUI(gui.main.UI):
         showinfo('checked', str(lst))
 
     def add_host(self, ip, name):
-        if ip not in ALLOWED_HOSTS:
-            ALLOWED_HOSTS[ip] = name
+        print(self.tree.config)
+        if ip not in self.tree.config:
+            self.tree.config[ip] = {'name': name, 'watched_files': {}}
+            #ALLOWED_HOSTS[ip] = name
+            self.tree.save_config()
             return True, 0
         else:
-            return False, ALLOWED_HOSTS[ip]
+            return False, self.tree.config[ip]['name']
+
 
 
 
@@ -194,30 +198,30 @@ class Tree(gui.tree2.App):
 
     def load_config(self):
         self.backup_tree = {}
-        self.config = {}
+        #self.config = {}
         try:
             with open(CONFIG_FILE, 'rb') as f:
                 self.config = pickle.load(f)
         except Exception as e:
-            print(e)
+            print('EXCEPTION: ', e)
 
-        for host in self.config:
-            self.backup_tree[host] = {}
-            paths = self.config[host]['watched_files']
+        for host_ip in self.config:
+            self.backup_tree[host_ip] = {}
+            paths = self.config[host_ip]['watched_files']
             for path in map(PurePosixPath, paths):
-                reduce(lambda node, part: node.setdefault(part, {}), path.parts[1:], self.backup_tree[host])
+                reduce(lambda node, part: node.setdefault(part, {}), path.parts[1:], self.backup_tree[host_ip])
             print('backup-tree', self.backup_tree)
 
     def load_tree(self):
-        for host in self.backup_tree:
-            node = self.tree.insert('', 'end', text=host, open=False, value=('NOT_CONNECTED', '-', '-'))
-            host_ip = self.config[host]['ip']
+        for host_ip in self.backup_tree:
+            name = self.config[host_ip]['name']
+            node = self.tree.insert('', 'end', text=name, open=False, value=('NOT_CONNECTED', '-', '-'))
             self.tree.tag_add(node, host_ip)
             # self.tree.tag_add(node, 'ghost')
             self.tree.tag_add(node, 'disconnected')
             # for part in self.backup_tree[host]:
                 #node = self.tree.insert(node, 'end', text=part, open=False)
-            self._load_tree(self.backup_tree[host], node)
+            self._load_tree(self.backup_tree[host_ip], node)
 
     def _load_tree(self, parent, iid):
         print(parent, iid)
@@ -249,11 +253,23 @@ class Tree(gui.tree2.App):
         self.insert_node(node, path, path)
 
     def send_checked(self):
-        #client = '127.0.0.1'  # TODO Перенести в main app?
+        #client = '127.0.0.1'  # TODO Перенести в main app? Убрать лишние запросы на листы отсдеживания
         checked = self.get_checked()  # TODO add many clients (almost done)
         current_watchdict = serverUI.get_list(flag=True)
         errors = {}
+        old_watchdict = {}
         print(f'[DEBUG] checked={checked}')
+        for client in clients:
+            for file in self.config[client]['watched_files']:
+                if file not in checked[client]:
+                    print('file to remove ', file)
+                    cmd = ('cmd', 'rm', file)
+                    clients[client].append(cmd)
+            #old_watchdict[client] = self.config[client]['watched_files']
+        #for client in self.config:
+         #   if client not in checked:
+          #      print(f'remove all {client}')
+           #     clients[client].append(('cmd','rm_all', '0'))
         for client in checked:
             for i in checked[client]:
                 path = os.path.normpath(i)
@@ -266,6 +282,13 @@ class Tree(gui.tree2.App):
                         errors[client] = [path]
                     else:
                         errors[client].append(path)
+            """for i in current_watchdict[client]:
+                path = os.path.normpath(i)
+                print('path to remove', path)
+                cmd = ('cmd', 'rm', path)
+                clients[client].append(cmd)
+                print('очередь ', clients[client])"""
+        print('очередь ', clients)
         self.save_checked()
         if errors:
             a = tk.Toplevel()
@@ -292,14 +315,18 @@ class Tree(gui.tree2.App):
             showinfo('Успешно', 'Выбранные файлы успешно добавлены')
             return True
 
+    def save_config(self):
+        with open(CONFIG_FILE, 'wb') as f:
+            pickle.dump(self.config, f)
+
     def save_checked(self):  # TODO fix to save_config
         selected = self.get_checked()
         for client_ip in selected:
-            client_name = ALLOWED_HOSTS[client_ip]
-            self.config[client_name] = {'ip': client_ip, 'watched_files': selected[client_ip]}
-        print(self.config)
-        with open(CONFIG_FILE, 'wb') as f:
-            pickle.dump(self.config, f)
+            #client_name = ALLOWED_HOSTS[client_ip]
+            client_name = self.config[client_ip]['name']
+            self.config[client_ip] = {'name': client_name, 'watched_files': selected[client_ip]}
+        print('[self.config] ', self.config)
+        self.save_config()
 
     def toggle_1(self, parent):
         if self.var.get() == 'Unlocked':
@@ -390,7 +417,7 @@ class MyClienthandler(socketserver.BaseRequestHandler):
         return 'SUCCESS AUTH'
 
     def handle(self) -> None:
-        if self.client_ip not in ALLOWED_HOSTS:
+        if self.client_ip not in b.config:
             self.request.close()
             exit(0)
         b.start_up(self.client_ip)
@@ -447,7 +474,7 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                 conn.send(reply)
                 sent.append(i)
                 cmd_list.remove(i)
-            time.sleep(2)
+            time.sleep(1)
 
 
 myaddr = (myHost, myPort)
