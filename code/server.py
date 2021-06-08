@@ -21,7 +21,7 @@ INFO = ['WARNING-CHANGES']
 ALLOWED_HOSTS = {'127.0.0.1': 'ghost1', }
 CONNECTED_HOSTS = {}
 HOSTS_UNDER_CONTROL = {}
-CONFIG_FILE = '/home/midway/NIRS/code/work/code/files/psv-config.txt'
+CONFIG_FILE = '/home/user/Projects/checker/code/files/psv-config.txt'
 
 clients = {}
 resp = {}
@@ -168,11 +168,10 @@ class serverUI(gui.main.UI):
             self.tree.config[ip] = {'name': name, 'watched_files': {}}
             #ALLOWED_HOSTS[ip] = name
             self.tree.save_config()
+            self.tree.load_config()
             return True, 0
         else:
             return False, self.tree.config[ip]['name']
-
-
 
 
 class Tree(gui.tree2.App):
@@ -180,21 +179,33 @@ class Tree(gui.tree2.App):
     def start_up(self, i):
         abspath = '/'
         # for i in clients:
+        if i not in self.nodes:
+            self.nodes[i] = {}
         self.dirs[i] = []
-        self.nodes[i] = {}
         self.node[i] = {}
-        node = self.tree.insert('', 'end', text=ALLOWED_HOSTS[i], open=False, values=('подключен', 'целостность не нарушена', 'отслеживается'))
+        print('[SAVED NODE]', self.saved_node)
+        if i in self.saved_node:
+            for path in self.saved_node[i]:
+                self.tree.tag_del(self.saved_node[i][path], 'disconnected')
+        node = self.tree.insert('', 'end', text=self.config[i]['name'], open=False, values=('подключен',
+                                                                                            'целостность не нарушена',
+                                                                                            'отслеживается'))
+
+        self.nodes[i][node] = abspath
+        self.node[i][node] = abspath
+
         self.parent_nodes[i] = node
         self.tree.tag_add(node, i)
         self.tree.tag_add(node, 'ghost')
+        # self.tree.tag_add(node, 'tristate')
         # self.tree.tag_add(node, 'disabled')
-        self.nodes[i][node] = abspath
-        self.node[i][node] = abspath
+
         print('Node from startup', node)
         print('Dirs from startup', self.dirs)
         # nt = self.tree.insert('', 'end', text='ghost2', open=False)
-        self.insert_node(node, abspath, abspath)
-        # self.tree.bind('<<TreeviewOpen>>', self.open_node)
+        # self.insert_node(node, abspath, abspath)
+        #self.tree.bind('<<TreeviewOpen>>', self.open_node)
+        self._load_tree(self.backup_tree[i], node, i, '/', open=True, disconnect=False)
 
     def load_config(self):
         self.backup_tree = {}
@@ -217,18 +228,42 @@ class Tree(gui.tree2.App):
             name = self.config[host_ip]['name']
             node = self.tree.insert('', 'end', text=name, open=False, value=('NOT_CONNECTED', '-', '-'))
             self.tree.tag_add(node, host_ip)
+            self.nodes[host_ip] = {}
+            self.node[host_ip] = {}
+            #self.tree.tag_add(node, 'ghost')
+            if self.var.get() == 'Locked':
+                self.tree.tag_add(node, 'disabled')
             # self.tree.tag_add(node, 'ghost')
+            self.tree.change_state(node, 'tristate')
             self.tree.tag_add(node, 'disconnected')
             # for part in self.backup_tree[host]:
                 #node = self.tree.insert(node, 'end', text=part, open=False)
-            self._load_tree(self.backup_tree[host_ip], node)
+            self._load_tree(self.backup_tree[host_ip], node, host_ip, '/')
 
-    def _load_tree(self, parent, iid):
+    def _load_tree(self, parent, iid, host_ip, abspath_, open=True, disconnect=True):
         print(parent, iid)
         for i in parent:
-            node = self.tree.insert(iid, 'end', text=i, open=False, )
-            self.tree.tag_add(node, 'disconnected')
-            self._load_tree(parent[i], node)
+            abspath = abspath_ + '/' + i
+            node = self.tree.insert(iid, 'end', text=i, open=open, )
+            print(f'load_tree abspath {abspath}')
+            self.saved_node[host_ip] = {i: node}
+            self.tree.tag_add(node, host_ip)
+            if self.var.get() == 'Locked':
+                self.tree.tag_add(node, 'disabled')
+            if disconnect:
+                self.tree.tag_add(node, 'disconnected')
+            print(len(parent[i]))
+            self.tree.change_state(node, 'tristate')
+            self.node[host_ip][node] = abspath
+            if not len(parent[i]):
+                self.tree.change_state(node, 'checked')
+                abspath = abspath_
+            else:
+                self.nodes[host_ip][node] = abspath
+            self._load_tree(parent[i], node, host_ip, abspath, open=open, disconnect=disconnect)
+            print(' item in _load_tree', self.tree.item(node))
+        abspath = '/'
+            # self.tree.change_state(node, 'checked')
 
     def listdir(self, abspath, client='127.0.0.1'):
         timeout = 5
@@ -255,16 +290,29 @@ class Tree(gui.tree2.App):
     def send_checked(self):
         #client = '127.0.0.1'  # TODO Перенести в main app? Убрать лишние запросы на листы отсдеживания
         checked = self.get_checked()  # TODO add many clients (almost done)
+        print(f'[DEBUG] checked={checked}')
         current_watchdict = serverUI.get_list(flag=True)
         errors = {}
         old_watchdict = {}
-        print(f'[DEBUG] checked={checked}')
         for client in clients:
+            if client not in checked:
+                print('RM ALL ', client)
+                cmd = ('cmd', 'rm_all', '0')
+                clients[client].append(cmd)
+                continue
+
             for file in self.config[client]['watched_files']:
+                print('file', file)
                 if file not in checked[client]:
                     print('file to remove ', file)
                     cmd = ('cmd', 'rm', file)
                     clients[client].append(cmd)
+            for file in current_watchdict[client]:
+                if file not in checked[client]:
+                    print('file to remove ', file)
+                    cmd = ('cmd', 'rm', file)
+                    clients[client].append(cmd)
+
             #old_watchdict[client] = self.config[client]['watched_files']
         #for client in self.config:
          #   if client not in checked:
@@ -330,15 +378,19 @@ class Tree(gui.tree2.App):
 
     def toggle_1(self, parent):
         if self.var.get() == 'Unlocked':
+            # self.show_all()
             for i in self.tree.get_children(parent):
                 if self.tree.tag_has('disabled', i):
                     self.tree.tag_del(i, 'disabled')
                     self.toggle_1(i)
+            # self.show_all()
         else:
+            # self.show_only_selected()
             for i in self.tree.get_children(parent):
                 if not self.tree.tag_has('disabled', i):
                     self.tree.tag_add(i, 'disabled')
                     self.toggle_1(i)
+            # self.show_only_selected()
 
     def toggle(self):   # TODO Recursion!
         for i in self.parent_nodes:
@@ -358,8 +410,8 @@ class MyClienthandler(socketserver.BaseRequestHandler):
         clients[self.client_ip] = []
         information = 'checksum_md5(sys.argv[0], salt=salt)'
         salt_msg = pickle.dumps(('salt', self.salt, foo))  # TODO +в словарь с именами потоков,+другую соль
-        self.check_sum = checksum_md5('/home/midway/NIRS/code/work/code/wtchdog.py', salt=self.salt)
-        check_sum2 = checksum_sha('/home/midway/NIRS/code/work/code/wtchdog.py', salt=self.salt)
+        self.check_sum = checksum_md5('/home/user/Projects/checker/code/wtchdog.py', salt=self.salt)
+        check_sum2 = checksum_sha('/home/user/Projects/checker/code/wtchdog.py', salt=self.salt)
         if self.client_ip == '192.168.192.130':
             self.check_sum = checksum_md5('/home/midway/NIRS/code/work/code/files/1.py', salt=self.salt)
             check_sum2 = checksum_sha('/home/midway/NIRS/code/work/code/files/1.py', salt=self.salt)
@@ -474,7 +526,9 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                 conn.send(reply)
                 sent.append(i)
                 cmd_list.remove(i)
-            time.sleep(1)
+                print(f'send cmd {i}')
+                print(cmd_list)
+            time.sleep(2)
 
 
 myaddr = (myHost, myPort)

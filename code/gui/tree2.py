@@ -41,7 +41,9 @@ class CheckBoxTreeview(CheckboxTreeview):
 
 class App(object):
     def __init__(self, master, path):
+        self._detached = {}
         self.config = {}
+        self.saved_node = {}
         self.ghost = '127.0.0.1'
         self.dirs = {}
         self.nodes = dict()
@@ -83,8 +85,11 @@ class App(object):
         xsb.grid(row=3, column=0, sticky='ew')
         self.button_add()
         self.button_lock()
+        self.button_hide()
+        self.var_hide.set('Show ALL')
         #self.btn_lock.deselect()
         self.var.set('Locked')
+        self.tree.bind('<<TreeviewOpen>>', self.open_node)
 
         # ysb.pack(side=tk.LEFT)
         # xsb.pack(side=tk.TOP)
@@ -94,7 +99,7 @@ class App(object):
         # node = self.tree.insert('', 'end', text='ghost1', open=False)
         # nt = self.tree.insert('', 'end', text='ghost2', open=False)
         # self.insert_node(node, abspath, abspath, client)
-        self.tree.bind('<<TreeviewOpen>>', self.open_node)
+        self.bind_func_id = self.tree.bind('<<TreeviewOpen>>', self.open_node)
         # self.tree.bind('')
 
     def insert_node(self, parent, text, abspath):
@@ -135,17 +140,21 @@ class App(object):
         abspath = self.nodes[client_ip].pop(node, None)
         print('abspath poped', abspath)
         dictdir = {}
+        print('focused item', self.tree.item(node))
         if abspath:
-            self.tree.delete(self.tree.get_children(node))
+            print('here')
+            for ch in self.tree.get_children(node):
+                if self.tree.item(ch)['text'] == '':
+                    self.tree.delete(ch)
             for p in self.listdir(abspath, client_ip):  # TODO  или как-то переписать листдир для загрузки из конфига?
-                dictdir[p] = self.insert_node(node, os.path.split(p)[1], p)
-
-        for abspath in dictdir:
-            print(abspath, dictdir)
-            if abspath in self.config[client_ip]['watched_files']:
-                # self.tree.change_state(node, 'checked')
-                self.tree._check_ancestor(dictdir[abspath])
-                self.tree._check_descendant(dictdir[abspath])
+                if not any([p in item for item in self.config[client_ip]['watched_files']]):
+                    dictdir[p] = self.insert_node(node, os.path.split(p)[1], p)
+        # for abspath in dictdir:
+        #     print(abspath, dictdir)
+        #     if abspath in self.config[client_ip]['watched_files']:
+        #         # self.tree.change_state(node, 'checked')
+        #         self.tree._check_ancestor(dictdir[abspath])
+        #         self.tree._check_descendant(dictdir[abspath])
 
 
     def listdir(self, abspath, host=None):
@@ -179,6 +188,7 @@ class App(object):
                     selected[client_ip].append(path)
             except KeyError:
                 pass
+        print(selected)
         return selected
 
     def button_add(self):
@@ -190,11 +200,29 @@ class App(object):
         self.var = tk.StringVar()
         self.btn_lock = tk.Checkbutton(self.frame)
         self.btn_lock.config(onvalue='Unlocked', offvalue='Locked', indicatoron=False, variable=self.var,
-                             width=8, height=1,
+                             width=8, height=2,
                              textvariable=self.var,
                              command=self.toggle
                              )
         self.btn_lock.grid(row=5, column=0, sticky='e')
+
+    def button_hide(self):
+        self.var_hide = tk.StringVar()
+        self.btn_hide = tk.Checkbutton(self.frame)
+        self.btn_hide.config(onvalue='Show ALL', offvalue='HIDDEN', indicatoron=False, variable=self.var_hide,
+                             width=8, height=1,
+                             textvariable=self.var_hide,
+                             command=self.btn_hide_command
+                             )
+        self.btn_hide.grid(row=5, column=0, sticky='sn')
+
+    def btn_hide_command(self):
+        if self.var_hide.get() == 'Show ALL':
+            self.show_all()
+        elif self.var_hide.get() == 'HIDDEN':
+            self.show_only_selected()
+
+
 
     def toggle(self):  # TODO dict with variables (self.vars = dict())
         if self.var.get() == "ON":
@@ -204,6 +232,33 @@ class App(object):
 
     def send_checked(self):
         pass
+
+    def show_only_selected(self):
+        self.tree.unbind('<<TreeviewOpen>>', self.bind_func_id)
+        def _show_recursive(parent):
+            self._detached[parent] = []
+            for child in self.tree.get_children(parent):
+                if self.tree.tag_has('unchecked', child):
+                    self.tree.detach(child)
+                    self._detached[parent].append(child)
+                _show_recursive(child)
+        for parent in self.parent_nodes:
+            _show_recursive(self.parent_nodes[parent])
+        self.toggle()
+
+    def show_all(self):
+        self.bind_func_id = self.tree.bind('<<TreeviewOpen>>', self.open_node)
+        for parent in self._detached:
+            i = -1
+            for child in self._detached[parent]:
+                i += 1
+                self.tree.reattach(child, parent, i)
+            self._detached[parent].clear()
+        self.toggle()
+
+
+
+
 
 # if __name__ == '__main__':
 #     root = tk.Tk()

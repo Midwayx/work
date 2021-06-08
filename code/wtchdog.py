@@ -126,27 +126,29 @@ def worker(sock):
     z = threading.Thread(target=keep_alive, args=(sock, salt))
     z.start()
     while True:
-        data = sock.recv(1024)
-        if not data:
-            break
-        cmd_handler(data, peer_name)
         try:
             sock.send(wait_for_sent.pop())
         except IndexError:
             # print('NOTHING TO SEND')
+            pass
+        data = sock.recv(10240)
+        print(pickle.loads(data))
+        print(wait_for_sent)
+        if not data:
             continue
+        cmd_handler(data, peer_name)
 
 
 class CustomEventHandler(FileSystemEventHandler):
     cache = {}
-    file = '/home/midway/my_folder/tmpfile'
+    file = '/home/user/my_folder/tmpfile'
     # conn = sqlite3.connect('mydatabase.db', check_same_thread=False)
     # cur = conn.cursor()
-    config = '/home/midway/config.txt'
+    config = '/home/user/config.txt'
 
     dict_of_watches = dict()
     log_file = ''
-    watch_file = '/home/midway/watch_file'
+    watch_file = '/home/user/watch_file'
     list_of_files = []
     update_config = False
 
@@ -218,7 +220,7 @@ class CustomEventHandler(FileSystemEventHandler):
 
 class BasicClass:
     log_file = ''
-    watch_file = '/home/midway/watch_file'
+    watch_file = '/home/user/watch_file'
 
     # list_of_files = []
 
@@ -244,11 +246,12 @@ class BasicClass:
 
     def add_to_watch(self, path, recursive=True):
         # print(path)
+        norm_path = path.replace('//', '/')
         if path in self.dict_of_watches:
             print(f'This file already watches: {path}')
             return 'ERROR', 'This file already watches'
         try:
-            self.dict_of_watches[path] = self.observer.schedule(self.event_handler, path, recursive=recursive)
+            self.dict_of_watches[path] = self.observer.schedule(self.event_handler, norm_path, recursive=recursive)
         except FileNotFoundError:
             return 'ERROR', 'FileNotFoundError'
         if self.clear_start:  # TODO Что это?
@@ -266,13 +269,33 @@ class BasicClass:
     def remove_from_watch(self, path):
         if path not in self.dict_of_watches:
             return 'ERROR', 'This file isn`t watching'
-        descriptor = self.dict_of_watches[path]
-        self.observer.unschedule(descriptor)  # TODO А что если нет такого файла?
+        norm_path = path.replace('//', '/')
+        try:
+            descriptor = self.dict_of_watches[path]
+            self.observer.unschedule(descriptor)  # TODO А что если нет такого файла?
+        except Exception as e:
+            print('[ERROR! REMOVE FROM WATCH', e)
+            return 'FAIL', e
         self.dict_of_watches.pop(path, None)
+        print('successfully removed ', path)
         return 'OK', path
 
     def remove_all_from_watch(self):
-        self.observer.unschedule_all()
+        print('menya vizvali')
+        # paths = self.dict_of_watches.keys()
+        # print(paths)
+        # for path in self.dict_of_watches:
+        #     descriptor = self.dict_of_watches[path]
+        #     self.observer.unschedule(descriptor)  # TODO А что если нет такого файла?
+        #     print(self.dict_of_watches)
+        print('mmmmonster kiiilll')
+        try:
+            self.observer.unschedule_all()
+        except Exception as e:
+            print('[ERROR! REMOVE ALL FROM WATCH]', e)
+            return 'FAIL', e
+        print('ya srabotal')
+        #self.observer.unschedule_all()
         self.dict_of_watches = {}
         return 'OK', 'ALL_REMOVED'
 
