@@ -15,7 +15,7 @@ class TreeWindow(tkinter.Frame):
         self.tree.pack(side=tkinter.LEFT, fill=tkinter.Y)
         # Загружаем корневой каталог
         curPath = self.getLastPaht(path)
-        root = self.tree.insert("", 'end', text=curPath, open=True, values=(path))
+        root = self.tree.insert("", "end", text=curPath, open=True, values=(path))
         # Загрузить подкаталог
         self.loadTree(root, path)
         # Добавить полосу прокрутки
@@ -30,12 +30,12 @@ class TreeWindow(tkinter.Frame):
     def func(self, event):
         self.v = event.widget.selection()
         for sv in self.v:
-            file = self.tree.item(sv)['text']
+            file = self.tree.item(sv)["text"]
             self.otherWin.var.set(file)
-            absPath = self.tree.item(sv)['values'][0]
+            absPath = self.tree.item(sv)["values"][0]
             print(absPath)
-            if self.file_extension(absPath) == '.py':
-                with open(absPath, 'r', encoding='utf-8') as f:
+            if self.file_extension(absPath) == ".py":
+                with open(absPath, "r", encoding="utf-8") as f:
                     self.otherWin.txt.insert(tkinter.INSERT, f.read())
 
         # Получить расширение файла
@@ -46,9 +46,11 @@ class TreeWindow(tkinter.Frame):
     def loadTree(self, parent, parentPath):
         for fileName in os.listdir(parentPath):
             pathList = [parentPath, fileName]
-            absPath = '/'.join(pathList)
+            absPath = "/".join(pathList)
             # Вставить ветку первого уровня
-            treep = self.tree.insert(parent, 'end', text=self.getLastPaht(absPath), values=(absPath))
+            treep = self.tree.insert(
+                parent, "end", text=self.getLastPaht(absPath), values=(absPath)
+            )
             # Определить, является ли это каталогом
             if os.path.isdir(absPath):
                 self.loadTree(treep, absPath)
