@@ -76,7 +76,7 @@ class UI(tk.Frame):
         frame.grid(sticky=tk.NSEW)
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(0, weight=1)
-        ip_label = tk.Label(frame, text="Введите IPv4 адресс узла:")
+        ip_label = tk.Label(frame, text="Введите IPv4 адрес узла:")
         name_label = tk.Label(frame, text="Введите имя узла:")
 
         name_label.grid(row=0, column=0, sticky="w")

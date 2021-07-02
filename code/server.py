@@ -20,7 +20,6 @@ import gui.tree2
 
 myHost = ""
 myPort = 50007
-sent = []
 INFO = ["WARNING-CHANGES"]
 ALLOWED_HOSTS = {
     "127.0.0.1": "ghost1",
@@ -79,13 +78,13 @@ def checksum_sha(filename, salt=None):
 check_sum2 = checksum_sha(sys.argv[0],salt=salt)"""
 
 
-def send_com(conn):
-    while True:
-        cmd_list = clients
-        row_reply = ("cmd",) + tuple(x for x in input().strip().split())
-        reply = pickle.dumps(row_reply)
-        conn.send(reply)
-        sent.append(row_reply)
+# def send_com(conn):
+#     while True:
+#         cmd_list = clients
+#         row_reply = ("cmd",) + tuple(x for x in input().strip().split())
+#         reply = pickle.dumps(row_reply)
+#         conn.send(reply)
+#         sent.append(row_reply)
 
 
 def main_thread():
@@ -126,7 +125,7 @@ def _main_thread():
         else:
             print(f"This client {client} not found")
         # print(clients)
-        print("[MAIN THREAD]: list of sent command ", sent)
+        # print("[MAIN THREAD]: list of sent command ", sent)
 
 
 class serverUI(gui.main.UI):
@@ -228,7 +227,7 @@ class Tree(gui.tree2.App):
         watch_list = serverUI.get_list(flag=True, client=(client_ip,))
         # print(watch_list)
         diff = {client_ip: {"to_add": [], "to_remove": []}}
-        print('self.config', self.config)
+        # print('self.config', self.config)
         for file in watch_list[client_ip]:
             if file not in self.config[client_ip]["watched_files"]:
                 self.config[client_ip]["watched_files"].append(file)
@@ -249,7 +248,17 @@ class Tree(gui.tree2.App):
             open=True,
             disconnect=False,
         )
+        if not self.backup_tree[client_ip]:
+            self.tree.insert(
+                node,
+                "end",
+                text="",
+                open=False,
+            )
+        self.checked_node = [node for node in self.tree.get_checked()]
+        self.tree.saved_node = self.checked_node # TODO Исправить
         print('start_up done')
+        print(self.bind_func_id)
 
     def config_from_file(self):
         try:
@@ -324,7 +333,7 @@ class Tree(gui.tree2.App):
                 text=text,
                 open=open,
             )
-            print(self.saved_node)
+            # print(self.saved_node)
             self.saved_node[host_ip].append((abspath, node))
             self.tree.tag_add(node, host_ip)
             if self.var.get() == "Locked":
@@ -336,11 +345,14 @@ class Tree(gui.tree2.App):
             self.tree.tag_add(node, host_ip)
             self.node[host_ip][node] = abspath
             self.path[host_ip][abspath] = node
+            # self.checked_node.append(node)
             # print(self.path[host_ip])
 
             if not len(parent[i]):
                 self.tree.change_state(node, "checked")
                 abspath = abspath_
+
+                self.checked_node.append(node)
             else:
                 self.nodes[host_ip][node] = abspath
             self._load_tree(
@@ -556,44 +568,71 @@ class Tree(gui.tree2.App):
         self.pb.grid_remove()
 
     def send_files(self, diff, start_up=False, button=None):
+        start = time.time()
         if button:
             button.grid_remove()
             self.pb.grid()
             self.info_label.grid_forget()
             self.info_label.grid(row=1, column=0, sticky='w', pady=5, padx=5)
 
-        TIMEOUT = 16
-        retry = 3
+        TIMEOUT = 30
+        TRY = 3
+        retry = TRY
         count = 0
         print("Send files. Diff: ", diff)
         send = {}
+        buff = {}
+        wait_to_remove = {}
+        value, maximum = None, None
+        lock = threading.Lock()
+        lock1 = threading.Lock()
         while retry > 0:
             if not send:
+                # lock.acquire()
                 for client in diff:
                     send[client] = []
+                    buff[client] = []
+                    # wait_to_remove[client] = []
+
                     for file in diff[client]["to_add"]:
                         cmd = ("cmd", "add", file)
-                        clients[client].append(cmd)
                         send[client].append(cmd)
+                        buff[client].append(cmd)
+                        clients[client].append(cmd)
                         count += 1
                     for file in diff[client]["to_remove"]:
                         cmd = ("cmd", "rm", file)
-                        clients[client].append(cmd)
                         send[client].append(cmd)
+                        buff[client].append(cmd)
+                        clients[client].append(cmd)
                         count += 1
+                # lock.release()
             else:
+                # lock.acquire()
                 for client in send:
                     for cmd in send[client]:
                         clients[client].append(cmd)
+                # lock.release()
             timeout = TIMEOUT
             time.sleep(2)
             while timeout > 0 and count:
                 print(f'time left: {timeout}, files left: {count}')
                 print("SEND: ", send)
-                time.sleep(1)
-                timeout -= 1
+                time.sleep(0.5)
+                timeout -= 0.5
                 for client in diff:
+                    # lock1.acquire()
+                    # if wait_to_remove[client]:
+                        # lock1.acquire()
+                        # print('block')
+                    # for rsp in wait_to_remove[client]:
+                        # print('rsp in block ', rsp)
+                        # resp[client].remove(rsp)
+                        # wait_to_remove[client].remove(rsp)
+                        # send[client].remove(rsp[0])
+                        # lock1.release()
                     response = resp[client]  # TODO ????????
+                    # lock1.release()
                     try:
                         # intersection = [i for i in response[0] if i in send]
                         for rsp in response:
@@ -601,8 +640,11 @@ class Tree(gui.tree2.App):
                             sent_cmd = rsp[0]
                             if sent_cmd in send[client]:
                                 print('True')
+                                # lock.acquire()
                                 response.remove(rsp)
+                                # wait_to_remove[client].append(rsp)
                                 send[client].remove(sent_cmd)
+                                # lock.release()
 
                                 count -= 1
                                 abspath = rsp[0][2]
@@ -615,10 +657,13 @@ class Tree(gui.tree2.App):
                                             self.config[client]["watched_files"].append(
                                                 abspath
                                             )
-                                            message = "\tSuccessfully added to watch!"
+                                            message = "\tSuccessfully added to watch!" # TODO Много одинакового кода
+                                            node = self.path[client][abspath]
+                                            self.tree.item(node, value=('OK', rsp[2], 'отслеживается'))
+                                            self.master.update()
                                         else:
-                                            print("[DEBUG POINT send_files] UNEXPECTED ERROR!")
-                                            message = "This file already watching."
+                                            print("[DEBUG POINT send_files 1] UNEXPECTED ERROR!")
+                                            message = "[SYNC ERROR] This file already watching ."
                                     else:
                                         if abspath in self.config[client]["watched_files"]:
                                             self.config[client]["watched_files"].remove(
@@ -626,8 +671,8 @@ class Tree(gui.tree2.App):
                                             )
                                             message = "\tSuccessfully removed from watch!"
                                         else:
-                                            print("[DEBUG POINT send_files] UNEXPECTED ERROR!")
-                                            message = "This file already is not watching."
+                                            print("[DEBUG POINT send_files 2] UNEXPECTED ERROR!")
+                                            message = "[SYNC ERROR] This file already is not watching."
                                 elif rsp[2] == 'FileNotFoundError':
                                     message = 'Error! This file does not exist (client send FileNotFoundError). ' \
                                               'File removed from tree'
@@ -642,10 +687,27 @@ class Tree(gui.tree2.App):
                                         # self.tree.change_state(node, 'unchecked')
 
                                 elif rsp[2] == 'This file already watches':
-                                    message = 'Error! This file already watches'
+                                    if sent_cmd in buff[client]:
+                                        if (
+                                            abspath
+                                            not in self.config[client]["watched_files"]
+                                        ):
+                                            self.config[client]["watched_files"].append(
+                                                abspath
+                                            )
+                                        message = "\tSuccessfully added to watch!"
+                                    else:
+                                        message = 'Error! This file already watches'
 
                                 elif rsp[2] == 'This file isn`t watching':
-                                    message = 'Error! This file isn`t watching'
+                                    if sent_cmd in buff[client]:
+                                        if abspath in self.config[client]["watched_files"]:
+                                            self.config[client]["watched_files"].remove(
+                                                abspath
+                                            )
+                                        message = "\tSuccessfully removed from watch!"
+                                    else:
+                                        message = 'Error! This file isn`t watching'
 
                                 else:
                                     message = rsp[2]
@@ -662,7 +724,7 @@ class Tree(gui.tree2.App):
 
                                 self.pb_label.configure(
                                     text=f'Обработано {value} файлов из {maximum}\n '
-                                         f'Осталось попыток: {retry}'
+                                         f'Осталось попыток: {retry}/{TRY}'
                                 )
 
                                 self.pb['value'] = value
@@ -670,7 +732,7 @@ class Tree(gui.tree2.App):
                                     self.pb_label.configure(
                                         text=f' ВЫПОЛНЕНО!\n '
                                              f'Обработано {value} файлов из {maximum}\n '
-                                             f'Осталось попыток: {retry}'
+                                             f'Осталось попыток: {retry}/{TRY}'
                                     )
 
                                 index = self.text_frame.search(abspath + ' ', "1.0")
@@ -697,18 +759,27 @@ class Tree(gui.tree2.App):
                                     self.text_frame.update()
                                 else:
                                     print("Unexpected Error!")
-
                             else:
                                 print(f'False {sent_cmd} not in send[client]')
                         else:
                             continue
+
                     except Exception as e:
                         print("[ERROR send_files]", e)
                         return "FAIL"
             if count == 0:
+                print(f'send files working {time.time()-start}')
                 return ['OK, DONE']
-            print(f'[RETRYING #{retry}]')
             retry -= 1
+            if not start_up:
+                self.pb_label.configure(
+                    text=f'Обработано {value} файлов из {maximum}\n '
+                         f'Осталось попыток: {retry}/{TRY}'
+                         f'Потеряли: {len(send)}'
+                )
+                time.sleep(1)
+            print(f'[RETRYING #{retry}]')
+        print(f'send files working {time.time() - start}')
         return ["..."]  # TODO call timeout error message
 
     def save_config(self):
@@ -725,6 +796,8 @@ class Tree(gui.tree2.App):
                 "watched_files": selected[client_ip],
             }
         # print("[self.config] ", self.config)
+        self.checked_node = [node for node in self.tree.get_checked()]
+        print('ggg checked_node: ', self.checked_node)
         self.save_config()
 
     def toggle_1(self, parent):
@@ -744,6 +817,7 @@ class Tree(gui.tree2.App):
             # self.show_only_selected()user
 
     def toggle(self):  # TODO Recursion!
+        print('checked_node: ', self.checked_node)
         for i in self.parent_nodes:
             self.toggle_1(self.parent_nodes[i])
 
@@ -846,6 +920,8 @@ class MyClienthandler(socketserver.BaseRequestHandler):
         return "SUCCESS AUTH"
 
     def handle(self) -> None:
+        sent = []
+        locker = threading.Lock()
         if self.client_ip not in a.tree.config:
             self.request.close()
             exit(0)
@@ -859,7 +935,7 @@ class MyClienthandler(socketserver.BaseRequestHandler):
         elif auth == "SUCCESS AUTH":
             try:
                 th = threading.Thread(
-                    target=self.send_com, name=self.client_ip + "_sender"
+                    target=self.send_com, name=self.client_ip + "_sender", args=(sent,)
                 )
                 th.daemon = True
                 th.start()
@@ -869,7 +945,7 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                 thread_start_up.daemon = True
                 thread_start_up.start()
                 while True:
-                    data = self.request.recv(40960)
+                    data = self.request.recv(40960*5)
                     if not data:
                         continue
                     ans = pickle.loads(data)
@@ -895,11 +971,15 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                     elif ans[0] in sent:
                         if ans[1] == "OK":
                             print(f"[{self.client_ip} RESPONSE]: ", ans)
+                            # locker.acquire()
                             resp[self.client_ip].append(ans)  # todo queue
+                            # locker.release()
                             sent.remove(ans[0])  # TODO Валидация очереди
                         else:
                             print(f"[{self.client_ip} RESPONSE]: ", ans)
+                            # locker.acquire()
                             resp[self.client_ip].append(ans)  # todo remove!!!!
+                            # locker.release()
                             sent.remove(ans[0])
             finally:
                 self.request.close()
@@ -909,7 +989,7 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                     file=sys.stderr,
                 )
 
-    def send_com(self):
+    def send_com(self, sent):
         conn = self.request
         while True:
             cmd_list = clients[self.client_address[0]]
@@ -921,7 +1001,7 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                 sent.append(i)
                 cmd_list.remove(i)
                 print(f"send from server to client: {i}")
-                time.sleep(0.05)
+                time.sleep(0.1)
                 # print(cmd_list)
             # time.sleep(0.5)
 

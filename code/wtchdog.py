@@ -298,7 +298,7 @@ class BasicClass:
             self.watch_file, "r"
         ) as f:  # TODO var config ans then call self.save_config method
             for i in f:
-                print("line in init: ", i)
+                # print("line in init: ", i)
                 self.add_to_watch(i.strip())
         self.add_to_watch(os.path.abspath("/" + sys.argv[0]))
         # self.dump_file()
@@ -306,6 +306,9 @@ class BasicClass:
     def add_to_watch(self, path, recursive=True):
         now = time.time()
         norm_path = path.replace("//", "/")
+        if os.path.isdir(path):
+            print(f"This is dir. Isn`t supported: {path}")
+            return "ERROR", "This is dir. Isn`t supported"
         if path in self.dict_of_watches:
             print(f"This file already watches: {path}")
             return "ERROR", "This file already watches"
@@ -313,12 +316,14 @@ class BasicClass:
             self.dict_of_watches[path] = self.observer.schedule(
                 self.event_handler, norm_path, recursive=recursive
             )
+            md5 = checksum_md5(norm_path)
+
         except FileNotFoundError:
             return "ERROR", "FileNotFoundError"
         end = time.time()
         print(f"Добавление файла {path} заняло {end-now} секунды")
         self.dump_file()
-        return "OK", path
+        return "OK", md5
 
     def dump_file(self):
         print("[ DUMP FILE!]")

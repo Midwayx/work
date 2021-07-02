@@ -22,9 +22,13 @@ class CheckBoxTreeview(CheckboxTreeview):
         self.tag_configure("ghost", foreground="#118515", font=("Consolas", 12))
         self.tag_configure("disconnected", foreground="red", font=("Consolas", 12))
         self.tag_configure("odd", background="grey")
+        self.tag_configure('to_remove', background="yellow")
+        self.tag_configure('to_add', background="yellow")
+        self.saved_node = []
 
     def _box_click(self, event):
         """Check or uncheck box when clicked."""
+        print('Clicked! saved= ', self.saved_node)
         x, y, widget = event.x, event.y, event.widget
         elem = widget.identify("element", x, y)
         if "image" in elem:
@@ -38,6 +42,19 @@ class CheckBoxTreeview(CheckboxTreeview):
             elif self.tag_has("checked"):
                 self._uncheck_descendant(item)
                 self._uncheck_ancestor(item)
+        if self.saved_node:
+            self._unsaved_changes(self.saved_node)
+
+    def _unsaved_changes(self, saved):
+        checked = self.get_checked()
+        for node in saved:
+            if node not in checked:
+                self.tag_add(node, 'to_remove')
+        for node in checked:
+            if node not in saved:
+                self.tag_add(node, 'to_add')
+
+
 
 
 class App(object):
@@ -49,6 +66,7 @@ class App(object):
         self._detached = {}
         self.config = {}
         self.saved_node = {}
+        self.checked_node = []
         self.ghost = "127.0.0.1"
         self.dirs = {}
         self.nodes = dict()
@@ -107,7 +125,8 @@ class App(object):
         # nt = self.tree.insert('', 'end', text='ghost2', open=False)
         # self.insert_node(node, abspath, abspath, client)
         self.bind_func_id = self.tree.bind("<<TreeviewOpen>>", self.open_node)
-        # self.tree.bind('')
+        self.tree.bind("<Button-1>", self.tree._box_click, True)
+        self.checked_node = [1]
 
     def insert_node(self, parent, text, abspath):
 
@@ -182,6 +201,8 @@ class App(object):
 
     def listdir(self, abspath, host=None):
         return "MOCK"
+
+
 
     def is_dir(self, abspath):
         pass
@@ -303,6 +324,13 @@ class App(object):
             self._detached[parent].clear()
         self.toggle()
 
+    def show_unsaved_changes(self):
+
+        diff = self.get_diff()
+
+
+    def get_diff(self):
+        return {}
     # def append_from_backup(self, host_ip, ghost):
     #     detached_nodes = {}
     #     for abspath, node in self.saved_node[host_ip].items():
