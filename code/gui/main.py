@@ -1,4 +1,5 @@
 import re
+import signal
 import tkinter as tk
 from tkinter import ttk
 from tkinter.messagebox import *
@@ -13,16 +14,30 @@ def create_list(nt, txt="default"):
 
     return frame
 
-
 class UI(tk.Frame):
-    def __init__(self, parent=None):
+    def __init__(self):
         self.parent = tk.Tk()
+
         self.parent.minsize("500", "800")  # TODO config
-        tk.Frame.__init__(self, parent)
+        tk.Frame.__init__(self, self.parent)
         # self.pack(expand=tk.NO, fill=tk.X, side=tk.TOP)
         self.makeMenuBar()
         self.makeStartPage()
+        self.parent.protocol('WM_DELETE_WINDOW', self.iconify)
+        signal.signal(signal.SIGUSR1, self.sigusr1_handler)
         # self.mainloop()
+
+    def iconify(self):
+        print('Iconify this window!')
+        self.parent.withdraw()
+        #self.parent.after(5000, self.parent.deiconify)
+
+    def sigusr1_handler(self, signum, frame):
+        #print('hi')
+        self.parent.deiconify()
+        self.parent.update()
+        self.parent.grab_set()
+        self.parent.focus_set()
 
     def start(self):
         pass

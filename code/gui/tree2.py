@@ -54,9 +54,6 @@ class CheckBoxTreeview(CheckboxTreeview):
             if node not in saved:
                 self.tag_add(node, 'to_add')
 
-
-
-
 class App(object):
     def __init__(self, master, path):
         self.style = ttk.Style(master)
@@ -309,7 +306,7 @@ class App(object):
 
         for parent in self.parent_nodes:
             _show_recursive(self.parent_nodes[parent])
-        self.toggle()
+        #self.toggle()
 
     def show_all(self):
         self.bind_func_id = self.tree.bind("<<TreeviewOpen>>", self.open_node)

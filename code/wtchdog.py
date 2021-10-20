@@ -1,6 +1,6 @@
 #!/home/dmitry/Projects/checker/env/bin/python
 # -*- coding: utf-8 -*-
-
+import argparse
 import sys
 import time
 import logging
@@ -21,6 +21,21 @@ sockobj.connect((serverHost, serverPort))
 sent = []
 wait_for_sent = []
 queue = []
+
+
+def debugger(*args, **kwargs):
+    """ Replace to logger.logger """
+    if namespace.debug:
+        debugger(args, kwargs)
+
+
+def createParser():
+    """Парсер аргументов командной строки
+    """
+    pars = argparse.ArgumentParser()
+    #pars.add_argument('path')
+    pars.add_argument('-d', '--debug', action='store_true', default=False)
+    return pars
 
 
 def keep_alive(connect, salt):
@@ -54,18 +69,18 @@ def cmd_handler():
         start = time.time()
         for i in wait_for_sent:
             sockobj.send(i)
-            print('[SEND FROM CLIENT TO SERVER] ', pickle.loads(i))
+            debugger('[SEND FROM CLIENT TO SERVER] ', pickle.loads(i))
             wait_for_sent.remove(i)
 
         if queue:
             i = queue.pop()  # TODO here was pop (0)
             data, peer_name = i
             msg = pickle.loads(data)
-            print(f"received data, {msg}")
+            debugger(f"received data, {msg}")
             if len(msg) < 3:
                 result = ("ERROR", "Unexpected message type: len isn`t correct.")
-                print(result)
-                print(msg)
+                debugger(result)
+                debugger(msg)
                 wait_for_sent.append(pickle.dumps((msg,) + result))
                 continue
             msg_type = msg[0]
@@ -73,12 +88,12 @@ def cmd_handler():
                 cmd = msg[1]
                 arg = msg[2]
                 if arg != "0" and arg != 0:
-                    print(f"Вызываю команду {cmd} с аргументом {arg}")
+                    debugger(f"Вызываю команду {cmd} с аргументом {arg}")
                     result = commands[cmd](arg)
                 else:
-                    print(f"Вызываю команду {cmd} с аргументом {arg}")
+                    debugger(f"Вызываю команду {cmd} с аргументом {arg}")
                     result = commands[cmd]()
-                print('result, ', result)
+                debugger('result, ', result)
                 wait_for_sent.append(pickle.dumps((msg,) + result))
                 # print(f'result = {result}')
             elif msg_type == "info":
@@ -87,18 +102,19 @@ def cmd_handler():
                 if status == "OK":
                     sent.remove(what)
                 elif status == "OK KEEP-ALIVE":
-                    print(f"[{peer_name} RESPONSE]: ", msg)
+                    debugger(f"[{peer_name} RESPONSE]: ", msg)
                 elif what == "CRITICAL ERROR":
                     print(f"[CRITICAL ERROR] This file was changed!")
                 else:
                     pass  # TODO Доработать тут обработку ошибок
             else:
-                print("Unexpected message type")
+                debugger("Unexpected message type")
                 print(msg)
         else:
-            # time.sleep(1)
+            #time.sleep(1)
             continue
         print('Время в цикле: ', time.time()-start)
+
 
 def checksum_md5(filename, salt=None):
     md5 = hashlib.md5()
@@ -144,7 +160,7 @@ def worker(sock):
             data = pickle.loads(data)
             # print(data)
             # print(data[2])
-            print('[ROW DATA FROM SERVER TO CLIENT] ', data)
+            debugger('[ROW DATA FROM SERVER TO CLIENT] ', data)
             if data[0] == "salt":
                 salt = data[1]
                 check_sum = checksum_md5(sys.argv[0], salt=salt)
@@ -154,16 +170,20 @@ def worker(sock):
                 sock.send(pickle.dumps((salt, check_sum, locals()["check_sum2"])))
                 print("Successfully connected to ", peer_name)  # TODO
                 break
+        else:
+            os.sleep(0.5)
     z = threading.Thread(target=keep_alive, args=(sock, salt))
     z.start()
     while True:
         data = sock.recv(2048)
-        print('[RECEIVED FATA FROM SERVER]: ', pickle.loads(data))
+        debugger('[RECEIVED DATA FROM SERVER]: ', pickle.loads(data))
         # print('data', pickle.loads(data))
         # print('wait for sent', wait_for_sent)
-        if not data:
-            continue
         queue.append((data, peer_name))
+        if not data:
+            time.sleep(1)
+            continue
+        #queue.append((data, peer_name))
 
 
 class CustomEventHandler(FileSystemEventHandler):
@@ -257,7 +277,7 @@ class CustomEventHandler(FileSystemEventHandler):
         basic.remove_from_watch(event.src_path)
 
     def on_moved(self, event):
-        print(" Я сработал")
+        debugger(" Я сработал")
         conn = sqlite3.connect("mydatabase.db")
         cur = conn.cursor()
         what = "directory" if event.is_directory else "file"
@@ -292,7 +312,7 @@ class BasicClass:
         self.list_of_files = event_handler.list_of_files
         self.observer = observer
         self.event_handler = event_handler
-        print(self.watch_file)
+        debugger(self.watch_file)
         self.observer.start()
         with open(
             self.watch_file, "r"
@@ -326,7 +346,7 @@ class BasicClass:
         return "OK", md5
 
     def dump_file(self):
-        print("[ DUMP FILE!]")
+        debugger("[ DUMP FILE!]")
         data = [file for file in self.dict_of_watches]
         with open(self.watch_file, "w") as foo:
             for file in data:
@@ -341,13 +361,12 @@ class BasicClass:
             return "ERROR", "Can not unschedule myself"
         try:
             descriptor = self.dict_of_watches[path]
-            print("досюда доходит и все(")
             self.observer.unschedule(descriptor)  # TODO А что если нет такого файла?
         except Exception as e:
-            print("[ERROR] REMOVE FROM WATCH", e)
+            debugger("[ERROR] REMOVE FROM WATCH", e)
             return "FAIL", e
         self.dict_of_watches.pop(path, None)
-        print("successfully removed ", path)
+        debugger("successfully removed ", path)
         self.dump_file()
         return "OK", path
 
@@ -369,6 +388,7 @@ class BasicClass:
 
 
 if __name__ == "__main__":
+    namespace = createParser().parse_args()
     event_handler = CustomEventHandler()
     observer = Observer()
     basic = BasicClass(observer, event_handler)

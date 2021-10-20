@@ -1,6 +1,6 @@
 #!/home/dmitry/Projects/checker/env/bin/python
 # -*- coding: utf-8 -*-
-
+import argparse
 import hashlib
 import os.path
 import socketserver, time
@@ -17,6 +17,7 @@ from typing import Dict, Any
 
 import gui.main
 import gui.tree2
+cnt = 0
 
 myHost = ""
 myPort = 50007
@@ -34,6 +35,30 @@ resp: Dict[Any, Any] = {}
 
 def now():
     return time.ctime(time.time())
+
+
+def time_of_func_running(func):
+    def wrapped(*args, **kwargs):
+        start_time = time.perf_counter()
+        res = func(*args, **kwargs)
+        debugger(f"Выполнение функции {str(func)} заняло {time.perf_counter()-start_time} секунд.")
+        return res
+    return wrapped
+
+
+def debugger(*args, **kwargs):
+    """ Replace to logger.logger """
+    if namespace.debug:
+        debugger(args, kwargs)
+
+
+def createParser():
+    """Парсер аргументов командной строки
+    """
+    pars = argparse.ArgumentParser()
+    #pars.add_argument('path')
+    pars.add_argument('-d', '--debug', action='store_true', default=False)
+    return pars
 
 
 def valid_ipv4(ip):
@@ -118,12 +143,12 @@ def _main_thread():
     while True:
         client, *cmd = tuple(x for x in input().strip().split())
         if client in clients:
-            print("[MAIN THREAD]: cmd added")
+            debugger("[MAIN THREAD]: cmd added")
             clients[client].append(("cmd",) + tuple(cmd))
         elif client.lower() == "exit":
             break
         else:
-            print(f"This client {client} not found")
+            debugger(f"This client {client} not found")
         # print(clients)
         # print("[MAIN THREAD]: list of sent command ", sent)
 
@@ -134,6 +159,7 @@ class serverUI(gui.main.UI):
         super().__init__()
 
     @staticmethod
+    @time_of_func_running
     def get_list(flag=None, client=None):
         # print("get_list called")
         answer = {}
@@ -156,8 +182,8 @@ class serverUI(gui.main.UI):
                         # print(f"q={q}, i={i}")
                         resp[i].remove(response)
                         q.remove(i)
-            time.sleep(0.2)
-            timeout -= 0.2
+            time.sleep(0.05)
+            timeout -= 0.05
         if flag:
             return answer
         output = [str(i) + ": " + str(answer[i]) for i in answer]
@@ -165,7 +191,7 @@ class serverUI(gui.main.UI):
 
     def add_file(self):
         pass
-
+    @time_of_func_running
     def get_checked(self):
         lst = self.tree.get_checked()
         # print(lst)
@@ -184,6 +210,42 @@ class serverUI(gui.main.UI):
 
 
 class Tree(gui.tree2.App):
+    load_status = 0
+    cnt = 0
+
+    def iconify(self):
+        self.master.protocol('WM_DELETE_WINDOW')
+
+    def make_load_gif(self):
+
+        label = tk.Label(self.frame)
+        #label.config(bg='systemTransparent')
+        label.place(anchor='center', relx=0.5, rely=0.5)
+        #label.place(anchor='center')
+        frameCnt = 15
+        frames = [tk.PhotoImage(file='/home/dmitry/Загрузки/XOsX.gif', format='gif -index %i' % i).subsample(3, 3) for i in range(frameCnt)]
+        #frames = [tk.PhotoImage(file='/home/dmitry/Загрузки/XOsX.gif', format='gif -index %i' % (i)) for
+        #          i in range(frameCnt)]
+
+
+        def update(ind):
+            debugger(f'update start {ind=}')
+        #if self.load_status != 1:
+            if self.load_status == 1:
+                debugger('load status = 1! Download complete')
+                label.place_forget()
+                return
+            frame = frames[ind]
+            ind += 1
+            if ind == frameCnt:
+                ind = 0
+            label.configure(image=frame, bg='white')
+            self.frame.update()
+            self.frame.after(100, update, ind)
+
+        update(0)
+        #label.place_forget()
+
     def start_up(self, client_ip):
         abspath = "/"
         if client_ip not in self.nodes:
@@ -191,14 +253,15 @@ class Tree(gui.tree2.App):
         self.dirs[client_ip] = []
         self.node[client_ip] = {}
         self.path[client_ip] = {}
-        print("[SAVED NODE]", self.saved_node)
+        debugger("[SAVED NODE]", self.saved_node)
+        self.make_load_gif()
         if client_ip in self.saved_node:
             for item in self.saved_node[client_ip]:
                 try:
                     self.tree.delete(item[1])
                 except Exception as e:
-                    print('Item: ', item)
-                    print(f"[ERROR start_up] {e}")
+                    debugger('Item: ', item)
+                    debugger(f"[ERROR start_up] {e}")
                     pass
                 # self.tree.tag_del(self.saved_node[i][path], 'disconnected')
         node = self.tree.insert(
@@ -234,7 +297,7 @@ class Tree(gui.tree2.App):
         for file in self.config[client_ip]["watched_files"]:
             if file not in watch_list[client_ip]:
                 diff[client_ip]["to_add"].append(file)
-                print(
+                debugger(
                     f"[WARNING] File {file} from {client_ip} is not watching by client, but stored in server config"
                 )
         self.load_config()
@@ -257,15 +320,17 @@ class Tree(gui.tree2.App):
             )
         self.checked_node = [node for node in self.tree.get_checked()]
         self.tree.saved_node = self.checked_node # TODO Исправить
-        print('start_up done')
-        print(self.bind_func_id)
+        self.load_status = 1
+        debugger('start_up done')
+
+        debugger(self.bind_func_id)
 
     def config_from_file(self):
         try:
             with open(CONFIG_FILE, "rb") as f:
                 self.config = pickle.load(f)
         except Exception as e:
-            print("EXCEPTION: ", e)
+            debugger("EXCEPTION: ", e)
 
     def load_config(self):
         if not self.config:
@@ -274,7 +339,7 @@ class Tree(gui.tree2.App):
                 with open(CONFIG_FILE, "rb") as f:
                     self.config = pickle.load(f)
             except Exception as e:
-                print("EXCEPTION: ", e)
+                debugger("EXCEPTION: ", e)
 
         for host_ip in self.config:
             self.backup_tree[host_ip] = {}
@@ -362,13 +427,14 @@ class Tree(gui.tree2.App):
         abspath = "/"
         # self.tree.change_state(node, 'checked')
 
+    @time_of_func_running
     def listdir(self, abspath, client="127.0.0.1"):
         timeout = 10
-        print('clients in listdir', clients)
+        debugger('clients in listdir', clients)
         clients[client].append(("cmd", "get_listdir", abspath))
         # print("here listdir called")
         while timeout > 0:
-            print(timeout)
+            debugger(timeout)
             time.sleep(0.2)
             timeout -= 0.2
             # print('foo', resp[client])
@@ -385,7 +451,7 @@ class Tree(gui.tree2.App):
                     else:
                         continue
                 except Exception as e:
-                    print("[ERROR listdir]", e)
+                    debugger("[ERROR listdir]", e)
                     return "FAIL"
         return ["..."]  # TODO call timeout error message
 
@@ -393,30 +459,31 @@ class Tree(gui.tree2.App):
         node = self.tree.insert("", "end", text=client, open=False)
         self.insert_node(node, path, path)
 
+    @time_of_func_running
     def send_checked(self):
         # client = '127.0.0.1'  # TODO Перенести в main app? Убрать лишние запросы на листы отсдеживания
         checked = self.get_checked()  # TODO add many clients (almost done)
         # TODO тут короче все надо перепахать
-        print(f"[DEBUG] checked={checked}")
+        debugger(f"[DEBUG] checked={checked}")
         current_watchdict = serverUI.get_list(flag=True)
         errors = {}
         old_watchdict = {}
         for client in clients:
             if client not in checked:
-                print("RM ALL ", client)
+                debugger("RM ALL ", client)
                 cmd = ("cmd", "rm_all", "0")
                 clients[client].append(cmd)
                 continue
 
             for file in self.config[client]["watched_files"]:
-                print("file", file)
+                debugger("file", file)
                 if file not in checked[client]:
-                    print("file to remove ", file)
+                    debugger("file to remove ", file)
                     cmd = ("cmd", "rm", file)
                     clients[client].append(cmd)
             for file in current_watchdict[client]:
                 if file not in checked[client]:
-                    print("file to remove ", file)
+                    debugger("file to remove ", file)
                     cmd = ("cmd", "rm", file)
                     clients[client].append(cmd)
 
@@ -428,7 +495,7 @@ class Tree(gui.tree2.App):
         for client in checked:
             for i in checked[client]:
                 path = os.path.normpath(i)
-                print("path to add", path)
+                debugger("path to add", path)
                 if i not in current_watchdict[client]:
                     cmd = ("cmd", "add", path)
                     clients[client].append(cmd)
@@ -443,7 +510,7 @@ class Tree(gui.tree2.App):
                 cmd = ('cmd', 'rm', path)
                 clients[client].append(cmd)
                 print('очередь ', clients[client])"""
-        print("очередь ", clients)
+        debugger("очередь ", clients)
         self.save_checked()
         if errors:
             a = tk.Toplevel(self.master)
@@ -475,6 +542,7 @@ class Tree(gui.tree2.App):
             showinfo("Успешно", "Выбранные файлы успешно добавлены")
             return True
 
+    @time_of_func_running
     def get_diff(self):
         selected_items = self.get_checked()  # TODO Починить
         diff = {}
@@ -502,6 +570,11 @@ class Tree(gui.tree2.App):
         rm_counter = 0
         diff = self.get_diff()
         window = tk.Toplevel(self.master)
+        # window.width = 1400
+        # window.height = 1600
+        window.geometry("1000x800")
+        window.minsize("850", "300")
+        #window.resizable(width=False, height=False)
         style = ttk.Style(window)
         style.theme_use('alt')
         window.grid_columnconfigure(0, weight=1)
@@ -579,8 +652,9 @@ class Tree(gui.tree2.App):
         TRY = 3
         retry = TRY
         count = 0
-        print("Send files. Diff: ", diff)
+        debugger("Send files. Diff: ", diff)
         send = {}
+        received = {}
         buff = {}
         wait_to_remove = {}
         value, maximum = None, None
@@ -592,6 +666,7 @@ class Tree(gui.tree2.App):
                 for client in diff:
                     send[client] = []
                     buff[client] = []
+                    received[client] = []
                     # wait_to_remove[client] = []
 
                     for file in diff[client]["to_add"]:
@@ -609,17 +684,23 @@ class Tree(gui.tree2.App):
                 # lock.release()
             else:
                 # lock.acquire()
-                for client in send:
-                    for cmd in send[client]:
-                        clients[client].append(cmd)
+                with open('log_psv.txt', 'w') as f:
+                    f.write(f'[########] RETRY {retry} [#############]\n')
+                    f.write(f'[state]\nОчередь: {clients}\nОтправлено: {send}\n Принято: {received}\n')
+                    for client in send:
+                        f.write(f'\n[]]\n')
+                        for cmd in send[client]:
+                            if cmd not in received[client]:
+                                clients[client].append(cmd)
+                                f.write(f'[REPEAT TO {client}] {cmd}\n')
                 # lock.release()
             timeout = TIMEOUT
-            time.sleep(2)
+            #time.sleep(1)
             while timeout > 0 and count:
-                print(f'time left: {timeout}, files left: {count}')
-                print("SEND: ", send)
-                time.sleep(0.5)
-                timeout -= 0.5
+                debugger(f'time left: {timeout}, files left: {count}')
+                debugger("SEND: ", send)
+                time.sleep(0.05)
+                timeout -= 0.05
                 for client in diff:
                     # lock1.acquire()
                     # if wait_to_remove[client]:
@@ -636,14 +717,15 @@ class Tree(gui.tree2.App):
                     try:
                         # intersection = [i for i in response[0] if i in send]
                         for rsp in response:
-                            print('rsp', rsp)
+                            debugger('rsp', rsp)
                             sent_cmd = rsp[0]
                             if sent_cmd in send[client]:
-                                print('True')
+                                debugger('True')
                                 # lock.acquire()
                                 response.remove(rsp)
                                 # wait_to_remove[client].append(rsp)
-                                send[client].remove(sent_cmd)
+                                received[client].append(sent_cmd)
+                                #send[client].remove(sent_cmd)
                                 # lock.release()
 
                                 count -= 1
@@ -662,8 +744,10 @@ class Tree(gui.tree2.App):
                                             self.tree.item(node, value=('OK', rsp[2], 'отслеживается'))
                                             self.master.update()
                                         else:
-                                            print("[DEBUG POINT send_files 1] UNEXPECTED ERROR!")
+                                            """ """
+                                            debugger("[DEBUG POINT send_files 1] UNEXPECTED ERROR!")
                                             message = "[SYNC ERROR] This file already watching ."
+
                                     else:
                                         if abspath in self.config[client]["watched_files"]:
                                             self.config[client]["watched_files"].remove(
@@ -671,15 +755,15 @@ class Tree(gui.tree2.App):
                                             )
                                             message = "\tSuccessfully removed from watch!"
                                         else:
-                                            print("[DEBUG POINT send_files 2] UNEXPECTED ERROR!")
+                                            debugger("[DEBUG POINT send_files 2] UNEXPECTED ERROR!")
                                             message = "[SYNC ERROR] This file already is not watching."
                                 elif rsp[2] == 'FileNotFoundError':
                                     message = 'Error! This file does not exist (client send FileNotFoundError). ' \
                                               'File removed from tree'
-                                    print(self.path)
-                                    print(message)
+                                    debugger(self.path)
+                                    debugger(message)
                                     if abspath in self.config[client]['watched_files']:
-                                        print(f'REMOVE file from config file = {abspath}')
+                                        debugger(f'REMOVE file from config file = {abspath}')
                                         self.config[client]['watched_files'].remove(abspath)
                                     if abspath in self.path[client]:
                                         node = self.path[client][abspath]
@@ -711,7 +795,7 @@ class Tree(gui.tree2.App):
 
                                 else:
                                     message = rsp[2]
-                                print('message: ', message)
+                                debugger('message: ', message)
                                 self.save_config()
                                 self.load_config()
 
@@ -758,17 +842,17 @@ class Tree(gui.tree2.App):
                                     self.text_frame.configure(state="disabled")
                                     self.text_frame.update()
                                 else:
-                                    print("Unexpected Error!")
+                                    debugger("Unexpected Error!")
                             else:
-                                print(f'False {sent_cmd} not in send[client]')
+                                debugger(f'False {sent_cmd} not in send[client]')
                         else:
                             continue
 
                     except Exception as e:
-                        print("[ERROR send_files]", e)
+                        debugger("[ERROR send_files]", e)
                         return "FAIL"
             if count == 0:
-                print(f'send files working {time.time()-start}')
+                debugger(f'send files working {time.time()-start}')
                 return ['OK, DONE']
             retry -= 1
             if not start_up:
@@ -777,9 +861,9 @@ class Tree(gui.tree2.App):
                          f'Осталось попыток: {retry}/{TRY}'
                          f'Потеряли: {len(send)}'
                 )
-                time.sleep(1)
-            print(f'[RETRYING #{retry}]')
-        print(f'send files working {time.time() - start}')
+                #time.sleep(1)
+            debugger(f'[RETRYING #{retry}]')
+        debugger(f'send files working {time.time() - start}')
         return ["..."]  # TODO call timeout error message
 
     def save_config(self):
@@ -797,10 +881,13 @@ class Tree(gui.tree2.App):
             }
         # print("[self.config] ", self.config)
         self.checked_node = [node for node in self.tree.get_checked()]
-        print('ggg checked_node: ', self.checked_node)
+        debugger('ggg checked_node: ', self.checked_node)
         self.save_config()
 
+    #@time_of_func_running
     def toggle_1(self, parent):
+        #cnt += 1
+        self.cnt1()
         if self.var.get() == "Unlocked":
             # self.show_all()
             for i in self.tree.get_children(parent):
@@ -814,12 +901,23 @@ class Tree(gui.tree2.App):
                 if not self.tree.tag_has("disabled", i):
                     self.tree.tag_add(i, "disabled")
                     self.toggle_1(i)
-            # self.show_only_selected()user
+            # self.show_only_selected()
 
+    @time_of_func_running
     def toggle(self):  # TODO Recursion!
-        print('checked_node: ', self.checked_node)
+        #cnt = 0
+        #print('checked_node: ', self.checked_node)
         for i in self.parent_nodes:
+            #cnt += 1
             self.toggle_1(self.parent_nodes[i])
+        debugger(f'Количество итераций функции toggle: {self.cnt}')
+        self.cnt = 0
+
+    def new_toggle(self):
+        pass
+
+    def cnt1(self):
+        self.cnt += 1
 
 
 class MyClienthandler(socketserver.BaseRequestHandler):
@@ -850,8 +948,8 @@ class MyClienthandler(socketserver.BaseRequestHandler):
             check_sum2 = checksum_sha(
                 "/home/midway/NIRS/code/work/code/files/1.py", salt=self.salt
             )
-        print(f"[CONNECTION REQUEST {self.client_ip}:{self.client_port}] at {now()}")
-        print(f"[AUTH DATA] SALT = {self.salt} CHECK_SUM = {self.check_sum}")
+        debugger(f"[CONNECTION REQUEST {self.client_ip}:{self.client_port}] at {now()}")
+        debugger(f"[AUTH DATA] SALT = {self.salt} CHECK_SUM = {self.check_sum}")
         while True:
             data = pickle.loads(self.request.recv(1024))
             # print(data)
@@ -864,16 +962,16 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                     output_1 = f"Client send {data[2]}"
                     output_2 = f"Server stored {self.check_sum}"
                     max_len = max(len(output_1), len(output_2))
-                    print(
+                    debugger(
                         f'[{self.client_address}] {"Auth failed!".upper()}\n'
                         f"[{self.client_address}] {output_1:>{max_len}}\n"
                         f"[{self.client_address}] {output_2:>{max_len}}",
                         file=sys.stderr,
                     )
-                    print("Connection close")
+                    debugger("Connection close")
 
                     return "AUTH FAILED"
-        print(
+        debugger(
             f"[{self.client_address} {threading.currentThread()}] Successful authorization. Key = {self.salt}"
         )
         return "SUCCESS AUTH"
@@ -892,8 +990,8 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                 "/home/midway/NIRS/code/work/code/files/1.py", salt=self.salt
             )
 
-        print(f"[CONNECTION REQUEST {self.client_ip}:{self.client_port}] at {now()}")
-        print(f"[AUTH DATA] SALT = {self.salt} CHECK_SUM = {self.check_sum}")
+        debugger(f"[CONNECTION REQUEST {self.client_ip}:{self.client_port}] at {now()}")
+        debugger(f"[AUTH DATA] SALT = {self.salt} CHECK_SUM = {self.check_sum}")
         while True:
             data = pickle.loads(self.request.recv(1024))
             # print(data)
@@ -906,15 +1004,15 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                     output_1 = f"Client send {data[1]}"
                     output_2 = f"Server stored {self.check_sum}"
                     max_len = max(len(output_1), len(output_2))
-                    print(
+                    debugger(
                         f'[{self.client_address}] {"Auth failed!".upper()}\n'
                         f"[{self.client_address}] {output_1:>{max_len}}\n"
                         f"[{self.client_address}] {output_2:>{max_len}}",
                         file=sys.stderr,
                     )
-                    print("Connection close")
+                    debugger("Connection close")
                     return "AUTH FAILED"
-        print(
+        debugger(
             f"[{self.client_address} {threading.currentThread()}] Successful authorization. Key = {self.salt}"
         )
         return "SUCCESS AUTH"
@@ -949,7 +1047,7 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                     if not data:
                         continue
                     ans = pickle.loads(data)
-                    print(f'[ROW RESPONSE FROM {self.client_ip}]: {ans}')
+                    debugger(f'[ROW RESPONSE FROM {self.client_ip}]: {ans}')
                     if ans[0] == "KEEP-ALIVE":
                         if ans[2] == self.check_sum and ans[3] == self.salt:
                             reply = pickle.dumps(("info", "OK KEEP-ALIVE", now()))
@@ -961,7 +1059,7 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                             )
                             clients[self.client_ip].append(("CRITICAL ERROR", now(), self.check_sum, self.salt))
                             # self.request.send(reply)
-                            print(
+                            debugger(
                                 f"[CRITICAL] Received hashsum from {self.client_address} isn`t correct:\n"
                                 f"Server stored {self.check_sum}\nClient sent   {ans[2]}",
                                 file=sys.stderr,
@@ -970,21 +1068,22 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                         # print(ans)
                     elif ans[0] in sent:
                         if ans[1] == "OK":
-                            print(f"[{self.client_ip} RESPONSE]: ", ans)
+                            debugger(f"[{self.client_ip} RESPONSE]: ", ans)
                             # locker.acquire()
                             resp[self.client_ip].append(ans)  # todo queue
                             # locker.release()
                             sent.remove(ans[0])  # TODO Валидация очереди
                         else:
-                            print(f"[{self.client_ip} RESPONSE]: ", ans)
+                            debugger(f"[{self.client_ip} RESPONSE]: ", ans)
                             # locker.acquire()
+
                             resp[self.client_ip].append(ans)  # todo remove!!!!
                             # locker.release()
                             sent.remove(ans[0])
             finally:
                 self.request.close()
-                print("close connection")
-                print(
+                debugger("close connection")
+                debugger(
                     f"[CRITICAL] lost connection with {self.client_address}",
                     file=sys.stderr,
                 )
@@ -1000,10 +1099,14 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                 conn.send(reply)
                 sent.append(i)
                 cmd_list.remove(i)
-                print(f"send from server to client: {i}")
-                time.sleep(0.1)
+                debugger(f"send from server to client: {i}")
+                time.sleep(0.05)
                 # print(cmd_list)
-            # time.sleep(0.5)
+            time.sleep(0.5)
+
+
+parser = createParser()
+namespace = parser.parse_args()
 
 
 myaddr = (myHost, myPort)
@@ -1012,10 +1115,10 @@ server_thread = threading.Thread(target=server.serve_forever)
 server_thread.name = "server_thread"
 server_thread.daemon = True
 server_thread.start()
-print("Server loop running in thread:", server_thread.name)
+debugger("Server loop running in thread:", server_thread.name)
 try:
 
     main_thread()
 finally:
     server.server_close()
-    print("close server")
+    debugger("close server")
