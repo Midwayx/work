@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import os.path
 import socketserver, time
+import sqlite3
 from functools import reduce
 from pathlib import PurePosixPath
 import pickle
@@ -199,11 +200,23 @@ class serverUI(gui.main.UI):
 
     def add_host(self, ip, name):
         # print(self.tree.config)
+        """ добавить проверку на уникальность имени"""
         if ip not in self.tree.config:
             self.tree.config[ip] = {"name": name, "watched_files": []}
             # ALLOWED_HOSTS[ip] = name
             self.tree.save_config()
-            self.tree.load_config()
+            #self.tree.load_config()
+            conn = sqlite3.connect("mydatabase.db")
+            cur = conn.cursor()
+            data = (name, ip, time.time())
+            cur.execute(
+                """INSERT INTO ghosts(name, ip, time) 
+            VALUES(?, ?, ?);""",
+                data,
+            )
+            conn.commit()
+            conn.close()
+
             return True, 0
         else:
             return False, self.tree.config[ip]["name"]
@@ -291,16 +304,26 @@ class Tree(gui.tree2.App):
         # print(watch_list)
         diff = {client_ip: {"to_add": [], "to_remove": []}}
         # print('self.config', self.config)
+
         for file in watch_list[client_ip]:
+            """ на случай, если какой-то файл отслеживается клиентом, но в конфиге сервера его нет
+            """
+            # conn, cur = False, False
             if file not in self.config[client_ip]["watched_files"]:
+            #     if not conn:
+            #         conn = sqlite3.connect("mydatabase.db")
+            #         cur = conn.cursor()
+            #     data = (self.config[client_ip]['name'], file, )
+            #     cur.execute("INSERT INTO watched_files(ghost, path, md5, time) VALUES(?, ?, ?, ?)", data)
                 self.config[client_ip]["watched_files"].append(file)
+
         for file in self.config[client_ip]["watched_files"]:
             if file not in watch_list[client_ip]:
                 diff[client_ip]["to_add"].append(file)
                 debugger(
                     f"[WARNING] File {file} from {client_ip} is not watching by client, but stored in server config"
                 )
-        self.load_config()
+        #self.load_config()
         self.save_config()
         self.send_files(diff, start_up=True)
         self._load_tree(
@@ -325,14 +348,24 @@ class Tree(gui.tree2.App):
 
         debugger(self.bind_func_id)
 
+    def _config_from_file(self):
+        pass
+
     def config_from_file(self):
         try:
             with open(CONFIG_FILE, "rb") as f:
                 self.config = pickle.load(f)
         except Exception as e:
             debugger("EXCEPTION: ", e)
+        print("config 1", self.config)
 
     def load_config(self):
+        local_config = {}
+        conn = sqlite3.connect("mydatabase.db")
+        cur = conn.cursor()
+        sql = "SELECT ip FROM ghosts"
+
+
         if not self.config:
             self.backup_tree = {}
             try:
@@ -340,6 +373,15 @@ class Tree(gui.tree2.App):
                     self.config = pickle.load(f)
             except Exception as e:
                 debugger("EXCEPTION: ", e)
+
+        for ip_row in cur.execute(sql):
+            ip = ip_row[0]
+            #print('ip', ip)
+            local_config[ip] = self.config[ip]
+
+        self.config = local_config
+        conn.commit()
+        conn.close()
 
         for host_ip in self.config:
             self.backup_tree[host_ip] = {}
@@ -351,6 +393,8 @@ class Tree(gui.tree2.App):
                     self.backup_tree[host_ip],
                 )
             # print("backup-tree", self.backup_tree)
+            #print("config", self.config)
+
 
     def load_tree(self):
         for host_ip in self.backup_tree:
@@ -641,6 +685,7 @@ class Tree(gui.tree2.App):
         self.pb.grid_remove()
 
     def send_files(self, diff, start_up=False, button=None):
+
         start = time.time()
         if button:
             button.grid_remove()
@@ -660,6 +705,9 @@ class Tree(gui.tree2.App):
         value, maximum = None, None
         lock = threading.Lock()
         lock1 = threading.Lock()
+
+        # conn = sqlite3.connect("mydatabase.db")
+        #cur = conn.cursor()
         while retry > 0:
             if not send:
                 # lock.acquire()
@@ -717,6 +765,7 @@ class Tree(gui.tree2.App):
                     try:
                         # intersection = [i for i in response[0] if i in send]
                         for rsp in response:
+                            #print('response', response)
                             debugger('rsp', rsp)
                             sent_cmd = rsp[0]
                             if sent_cmd in send[client]:
@@ -731,6 +780,10 @@ class Tree(gui.tree2.App):
                                 count -= 1
                                 abspath = rsp[0][2]
                                 if rsp[1] == 'OK':
+
+                                    conn = sqlite3.connect("mydatabase.db")
+                                    cur = conn.cursor()
+
                                     if rsp[0][1] == "add":
                                         if (
                                             abspath
@@ -739,6 +792,9 @@ class Tree(gui.tree2.App):
                                             self.config[client]["watched_files"].append(
                                                 abspath
                                             )
+                                            data = (self.config[client]['name'], abspath, rsp[2], time.time())
+                                            cur.execute("INSERT INTO watched_files(ghost, path, md5, time) VALUES(?, ?, ?, ?)", data)
+                                            conn.commit()
                                             message = "\tSuccessfully added to watch!" # TODO Много одинакового кода
                                             node = self.path[client][abspath]
                                             self.tree.item(node, value=('OK', rsp[2], 'отслеживается'))
@@ -749,14 +805,27 @@ class Tree(gui.tree2.App):
                                             message = "[SYNC ERROR] This file already watching ."
 
                                     else:
+
                                         if abspath in self.config[client]["watched_files"]:
                                             self.config[client]["watched_files"].remove(
                                                 abspath
                                             )
                                             message = "\tSuccessfully removed from watch!"
+
+                                            data = (self.config[client]['name'], abspath)
+                                            print('remove start', data)
+                                            cur.execute(
+                                                "DELETE FROM watched_files WHERE ghost=? AND path=?",
+                                                data)
+                                            conn.commit()
+                                            print('remove commit')
+
                                         else:
                                             debugger("[DEBUG POINT send_files 2] UNEXPECTED ERROR!")
                                             message = "[SYNC ERROR] This file already is not watching."
+
+                                        conn.close()
+
                                 elif rsp[2] == 'FileNotFoundError':
                                     message = 'Error! This file does not exist (client send FileNotFoundError). ' \
                                               'File removed from tree'
@@ -797,7 +866,7 @@ class Tree(gui.tree2.App):
                                     message = rsp[2]
                                 debugger('message: ', message)
                                 self.save_config()
-                                self.load_config()
+                                #self.load_config()
 
                                 if start_up:
                                     continue
@@ -864,6 +933,7 @@ class Tree(gui.tree2.App):
                 #time.sleep(1)
             debugger(f'[RETRYING #{retry}]')
         debugger(f'send files working {time.time() - start}')
+        conn.close()
         return ["..."]  # TODO call timeout error message
 
     def save_config(self):
