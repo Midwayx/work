@@ -1,4 +1,4 @@
-#!/home/dmitry/Projects/checker/env/bin/python
+
 # -*- coding: utf-8 -*-
 import argparse
 import hashlib
@@ -29,6 +29,7 @@ ALLOWED_HOSTS = {
 CONNECTED_HOSTS = {}
 HOSTS_UNDER_CONTROL = {}
 CONFIG_FILE = "/home/dmitry/Projects/checker/code/files/psv-config.txt"
+startup = dict()
 
 clients = {}
 resp: Dict[Any, Any] = {}
@@ -50,7 +51,7 @@ def time_of_func_running(func):
 def debugger(*args, **kwargs):
     """ Replace to logger.logger """
     if namespace.debug:
-        debugger(args, kwargs)
+        print(*args, **kwargs)
 
 
 def createParser():
@@ -226,8 +227,8 @@ class Tree(gui.tree2.App):
     load_status = 0
     cnt = 0
 
-    def iconify(self):
-        self.master.protocol('WM_DELETE_WINDOW')
+    # def iconify(self):
+    #     self.master.protocol('WM_DELETE_WINDOW')
 
     def make_load_gif(self):
 
@@ -260,6 +261,7 @@ class Tree(gui.tree2.App):
         #label.place_forget()
 
     def start_up(self, client_ip):
+        startup[client_ip] = True
         abspath = "/"
         if client_ip not in self.nodes:
             self.nodes[client_ip] = {}
@@ -280,7 +282,7 @@ class Tree(gui.tree2.App):
         node = self.tree.insert(
             "",
             "end",
-            text=self.config[client_ip]["name"],
+            text=f' {self.config[client_ip]["name"]}',
             open=False,
             values=("подключен", "целостность не нарушена", "отслеживается"),
         )
@@ -338,9 +340,10 @@ class Tree(gui.tree2.App):
             self.tree.insert(
                 node,
                 "end",
-                text="",
+                text=" ",
                 open=False,
             )
+        startup[client_ip] = False
         self.checked_node = [node for node in self.tree.get_checked()]
         self.tree.saved_node = self.checked_node # TODO Исправить
         self.load_status = 1
@@ -360,26 +363,38 @@ class Tree(gui.tree2.App):
         print("config 1", self.config)
 
     def load_config(self):
+        HOSTS = {}
         local_config = {}
         conn = sqlite3.connect("mydatabase.db")
         cur = conn.cursor()
-        sql = "SELECT ip FROM ghosts"
-
+        sql = "SELECT name, ip FROM ghosts"
 
         if not self.config:
             self.backup_tree = {}
-            try:
-                with open(CONFIG_FILE, "rb") as f:
-                    self.config = pickle.load(f)
-            except Exception as e:
-                debugger("EXCEPTION: ", e)
+            # try:
+            #     with open(CONFIG_FILE, "rb") as f:
+            #         self.config = pickle.load(f)
+            # except Exception as e:
+            #     debugger("EXCEPTION: ", e)
 
         for ip_row in cur.execute(sql):
-            ip = ip_row[0]
-            #print('ip', ip)
-            local_config[ip] = self.config[ip]
+            name, ip = ip_row
+            HOSTS[name] = ip
+        conn.commit()
+
+        for host in HOSTS:
+            ip = HOSTS[host]
+            watched_files = []
+            _hash = {}
+            for data in cur.execute("SELECT path, md5 FROM watched_files WHERE ghost=?", (host, )):
+                path, md5 = data
+                _hash[path] = md5
+                watched_files.append(path)
+
+            local_config[ip] = {'name': host, 'watched_files': watched_files[:], 'md5': _hash}
 
         self.config = local_config
+        print(f'{self.config=}')
         conn.commit()
         conn.close()
 
@@ -392,15 +407,13 @@ class Tree(gui.tree2.App):
                     path.parts[1:],
                     self.backup_tree[host_ip],
                 )
-            # print("backup-tree", self.backup_tree)
-            #print("config", self.config)
-
 
     def load_tree(self):
         for host_ip in self.backup_tree:
             name = self.config[host_ip]["name"]
+            text_with_space = f' {name}'
             node = self.tree.insert(
-                "", "end", text=name, open=True, value=("NOT_CONNECTED", "-", "-")
+                "", "end", text=text_with_space, open=True, value=("NOT_CONNECTED", "-", "-")
             )
             self.tree.tag_add(node, host_ip)
             self.nodes[host_ip] = {}
@@ -436,12 +449,23 @@ class Tree(gui.tree2.App):
             #         ch_counter += len(word)
             #     text = ' '.join(splittext)
             # print(f'load_tree abspath {abspath}')
-            node = self.tree.insert(
-                iid,
-                "end",
-                text=text,
-                open=open,
-            )
+            text_with_space = f' {text}'
+            if abspath in self.config[host_ip]['md5']:
+                md5 = self.config[host_ip]['md5'][abspath]
+                node = self.tree.insert(
+                    iid,
+                    "end",
+                    text=text_with_space,
+                    open=open,
+                    value=('', md5, '')
+                )
+            else:
+                node = self.tree.insert(
+                    iid,
+                    "end",
+                    text=text_with_space,
+                    open=open,
+                )
             # print(self.saved_node)
             self.saved_node[host_ip].append((abspath, node))
             self.tree.tag_add(node, host_ip)
@@ -619,18 +643,18 @@ class Tree(gui.tree2.App):
         window.geometry("1000x800")
         window.minsize("850", "300")
         #window.resizable(width=False, height=False)
-        style = ttk.Style(window)
-        style.theme_use('alt')
+        # style = ttk.Style(window)
+        # style.theme_use('alt')
         window.grid_columnconfigure(0, weight=1)
         window.grid_rowconfigure(0, weight=1)
-        frame = ttk.Frame(window)
+        frame = ttk.Frame(window, style='Card.TFrame')
         frame.grid(sticky=tk.NSEW)
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(0, weight=1)
 
         self.text_to_display = []
-        bg = self.master.cget("background")
-        text_frame = tk.Text(frame, wrap=tk.WORD, background=bg, bd=5, highlightthickness=0, relief='flat')
+        #bg = self.master.cget("background")
+        text_frame = tk.Text(frame, wrap=tk.WORD, bd=5, highlightthickness=0, relief='flat')
         self.text_frame = text_frame
 
         for client in diff:
@@ -656,26 +680,26 @@ class Tree(gui.tree2.App):
         text_frame.tag_config("ERROR", foreground="red")
 
         separator = ttk.Separator(frame, orient='horizontal')
-        separator.grid(row=1, column=0, columnspan=2, sticky=tk.NSEW)
+        separator.grid(row=1, column=0, columnspan=2, sticky="NWE")
 
-        button_ok = tk.Button(frame)
+        button_ok = ttk.Button(frame, style='Accent.TButton')
         button_ok.config(
-            text="Accept", command=lambda: self.send_files(diff, button=button_ok), width=8, height=1
+            text="Accept", command=lambda: self.send_files(diff, button=button_ok),
         )
-        button_ok.grid(row=1, column=0, sticky="w", ipady=2, ipadx=3, pady=5, padx=5)
+        button_ok.grid(row=1, column=0, sticky="wn", ipady=2, ipadx=3, pady=5, padx=5)
 
-        self.pb = ttk.Progressbar(frame, orient="horizontal", length=300, mode="determinate")
-        self.pb.grid(row=1, column=1, sticky='nsew', ipady=20, pady=0, padx=0)
+        self.pb = ttk.Progressbar(frame, orient="horizontal", length=700, mode="determinate")
+        self.pb.grid(row=1, column=0, sticky='ws', pady=5, padx=5)
         self.pb.grid_columnconfigure(0, weight=1)
         self.pb.grid_rowconfigure(0, weight=1)
         self.pb['value'] = 0
         self.pb['maximum'] = counter
 
-        self.pb_label = tk.Label(frame, text='')
-        self.pb_label.grid(row=1, column=0, sticky='e', pady=5, padx=5)
+        self.pb_label = ttk.Label(frame, text='')
+        self.pb_label.grid(row=1, column=1, sticky='n', pady=5, padx=5)
 
         self.info_label = ttk.Label(frame, text='')
-        self.info_label.grid(row=1, column=0, sticky='e', pady=5, padx=5)
+        self.info_label.grid(row=1, column=1, sticky='wn', pady=5, padx=5)
         self.info_label.configure(text=f'Hosts: {len(diff)}\nTo add: {add_counter}\nTo remove: {rm_counter}')
 
         scroll = ttk.Scrollbar(frame, command=text_frame.yview)
@@ -691,7 +715,7 @@ class Tree(gui.tree2.App):
             button.grid_remove()
             self.pb.grid()
             self.info_label.grid_forget()
-            self.info_label.grid(row=1, column=0, sticky='w', pady=5, padx=5)
+            self.info_label.grid(row=1, column=0, sticky='wn', pady=5, padx=5)
 
         TIMEOUT = 30
         TRY = 3
@@ -813,12 +837,12 @@ class Tree(gui.tree2.App):
                                             message = "\tSuccessfully removed from watch!"
 
                                             data = (self.config[client]['name'], abspath)
-                                            print('remove start', data)
+                                            # print('remove start', data)
                                             cur.execute(
                                                 "DELETE FROM watched_files WHERE ghost=? AND path=?",
                                                 data)
                                             conn.commit()
-                                            print('remove commit')
+                                            # print('remove commit')
 
                                         else:
                                             debugger("[DEBUG POINT send_files 2] UNEXPECTED ERROR!")
@@ -888,14 +912,18 @@ class Tree(gui.tree2.App):
                                              f'Осталось попыток: {retry}/{TRY}'
                                     )
 
-                                index = self.text_frame.search(abspath + ' ', "1.0")
+                                index = self.text_frame.search(abspath + ' ', "1.0", 'end')
+                                #print(index, abspath, len(abspath))
                                 # self.text_frame.update()
                                 self.text_frame.configure(state="normal")
                                 if index:
                                     string = self.text_frame.get(f'{index} linestart', f'{index} lineend')
+                                    print(f'{index=}, {abspath=}, {len(abspath)=}, {string=}, {len(string)=}')
                                     self.text_frame.insert(
-                                        f"{index} lineend", f"\t{message}".rjust(78-len(string))
+                                        f"{index} lineend", f"\t{message.rjust(100 - len(string))}"
                                     )
+                                    print(f"\t{message}".rjust(120-len(string)))
+                                    print(string)
                                     if 'Error!' in message:
                                         self.text_frame.tag_add(
                                             'ERROR',
@@ -1118,6 +1146,25 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                         continue
                     ans = pickle.loads(data)
                     debugger(f'[ROW RESPONSE FROM {self.client_ip}]: {ans}')
+                    if ans[0] == 'event':
+                        """(event, (ip, port), file, md5, time, event_type)"""
+                        #conn = sqlite3.connect('mydatabase.db')
+                        #cur = conn.cursor()
+                        host_name = a.tree.config[self.client_ip]['name']
+                        #host_name from response
+                        values = (host_name, *ans[2:])
+                        #cur.execute("INSERT INTO events(ghost, file, md5, time, event_type) VALUES(?, ?, ?, ?, ?)", values)
+                        #conn.commit()
+                        #conn.close()
+                        #print(a.tree.path[self.client_ip])
+                        while startup[self.client_ip]:
+                            print('startup flag', startup)
+                            time.sleep(0.1)
+                        node = a.tree.path[self.client_ip][ans[2]]
+                        a.tree.tree.item(node, value=('ФАЙЛ ИЗМЕНЕН!', ans[3], time.ctime(float(ans[4]))))
+                        a.tree.tree.tag_add(node, "changed")
+                        a.tree.tree.master.update()
+
                     if ans[0] == "KEEP-ALIVE":
                         if ans[2] == self.check_sum and ans[3] == self.salt:
                             reply = pickle.dumps(("info", "OK KEEP-ALIVE", now()))

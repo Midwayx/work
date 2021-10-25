@@ -171,7 +171,7 @@ def worker(sock):
                 print("Successfully connected to ", peer_name)  # TODO
                 break
         else:
-            os.sleep(0.5)
+            time.sleep(0.5)
     z = threading.Thread(target=keep_alive, args=(sock, salt))
     z.start()
     while True:
@@ -213,7 +213,9 @@ class CustomEventHandler(FileSystemEventHandler):
         else:
             what = "file"
             md5 = checksum_md5(file_name)
-        data = (file_name, md5, time.time(), event.is_directory, 1)
+
+        event_time = time.time()
+        data = (file_name, md5, event_time, event.is_directory, 1)
         print(md5)
         cur.execute(
             """INSERT INTO config(file_name, md5, time, is_directory, event_type) 
@@ -223,9 +225,12 @@ class CustomEventHandler(FileSystemEventHandler):
         conn.commit()
         data = pickle.dumps(
             (
-                "WARNING-CHANGES",
+                "event",
                 sockobj.getsockname(),
-                f"This {what} changed {file_name}",
+                f'/{file_name}',
+                md5,
+                event_time,
+                1
             )
         )
         print(f"this {what} changed {file_name}")

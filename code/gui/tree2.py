@@ -18,17 +18,18 @@ class CheckBoxTreeview(CheckboxTreeview):
     def __init__(self, master=None, **kw):
         CheckboxTreeview.__init__(self, master, **kw)
         # disabled tag to mar disabled items
+        self.tag_configure("changed", foreground='black', background='#FF8000')
         self.tag_configure("disabled", foreground="grey")
-        self.tag_configure("ghost", foreground="#118515", font=("Consolas", 12))
-        self.tag_configure("disconnected", foreground="red", font=("Consolas", 12))
+        self.tag_configure("ghost", foreground="#118515")
+        self.tag_configure("disconnected", foreground="red")
         self.tag_configure("odd", background="grey")
         self.tag_configure('to_remove', background="yellow")
         self.tag_configure('to_add', background="yellow")
+        self.tag_configure('highlight', background="lightblue")
         self.saved_node = []
 
     def _box_click(self, event):
         """Check or uncheck box when clicked."""
-        print('Clicked! saved= ', self.saved_node)
         x, y, widget = event.x, event.y, event.widget
         elem = widget.identify("element", x, y)
         if "image" in elem:
@@ -39,11 +40,11 @@ class CheckBoxTreeview(CheckboxTreeview):
             if self.tag_has("unchecked", item) or self.tag_has("tristate", item):
                 self._check_ancestor(item)
                 self._check_descendant(item)
-            elif self.tag_has("checked"):
+            elif self.tag_has("checked", item):
                 self._uncheck_descendant(item)
                 self._uncheck_ancestor(item)
-        if self.saved_node:
-            self._unsaved_changes(self.saved_node)
+        # if self.saved_node:
+        #     self._unsaved_changes(self.saved_node)
 
     def _unsaved_changes(self, saved):
         checked = self.get_checked()
@@ -56,9 +57,9 @@ class CheckBoxTreeview(CheckboxTreeview):
 
 class App(object):
     def __init__(self, master, path):
-        self.style = ttk.Style(master)
-        self.style.theme_use("alt")
-        self.style.configure("Treeview", font=("Helvetica", 12))
+        # self.style = ttk.Style(master)
+        # self.style.theme_use("alt")
+        # self.style.configure("Treeview", font=("Helvetica", 12))
         self.snapshot = None
         self._detached = {}
         self.config = {}
@@ -78,7 +79,7 @@ class App(object):
         #
         # for y in range(30):
         #     tk.Grid.rowconfigure(grid, y, weight=1)
-        frame = tk.Frame(master)
+        frame = ttk.Frame(master)
         self.frame = frame
         # frame.pack(side=tk.TOP, expand=tk.YES, fill=tk.BOTH)
         frame.grid(sticky=tk.NSEW)
@@ -102,15 +103,18 @@ class App(object):
         self.tree.heading("#1", text="Статус соединения", anchor=tk.W)
         self.tree.heading("#2", text="Состояние защиты", anchor=tk.W)
         self.tree.heading("#3", text="Статус отслеживания", anchor=tk.W)
-        self.tree.grid(sticky=tk.NSEW, rowspan=3)
-        ysb.grid(row=0, column=1, sticky="ns", rowspan=3)
-        xsb.grid(row=3, column=0, sticky="ew")
+        self.tree.grid(row=0, column=0, sticky=tk.NSEW)
+        ysb.grid(row=0, column=1, sticky="ns")
+        xsb.grid(row=1, column=0, sticky="ew", padx=(5, 0))
         self.button_add()
         self.button_lock()
         self.button_hide()
         self.var_hide.set("Show ALL")
         # self.btn_lock.deselect()
         self.var.set("Locked")
+
+        #self.sizegrip = ttk.Sizegrip(frame)
+        #self.sizegrip.grid(row=3, column=1, padx=(0, 5), pady=(0, 5))
         # self.tree.bind("<<TreeviewOpen>>", self.open_node)
 
         # ysb.pack(side=tk.LEFT)
@@ -122,9 +126,10 @@ class App(object):
         # nt = self.tree.insert('', 'end', text='ghost2', open=False)
         # self.insert_node(node, abspath, abspath, client)
         self.bind_func_id = self.tree.bind("<<TreeviewOpen>>", self.open_node)
-        self.tree.bind("<Button-1>", self.tree._box_click, True)
+        #self.tree.bind("<Button-1>", self.tree._box_click, True)
+        self.tree.bind("<Motion>", self.mycallback)
         self.checked_node = [1]
-
+        self.last_focus = None
     def insert_node(self, parent, text, abspath):
 
         tags = self.tree.item(parent)["tags"]  # TODO validation ip
@@ -143,8 +148,8 @@ class App(object):
         #             ch_counter = 0
         #         splittext.append(word+'\n')
         #     text = ' '.join(splittext)
-
-        node = self.tree.insert(parent, "end", text=text, open=False)
+        text_with_space = f' {text}'
+        node = self.tree.insert(parent, "end", text=text_with_space, open=False)
         self.tree.tag_add(node, client_ip)
         if self.var.get() == "Locked":
             self.tree.tag_add(node, "disabled")
@@ -199,7 +204,36 @@ class App(object):
     def listdir(self, abspath, host=None):
         return "MOCK"
 
+    def mycallback(self, event):
 
+        # _iid = self.tree.identify_row(event.y)
+        # tags = self.tree.item(_iid)["tags"]
+        # print('tags before', tags)
+        tree = event.widget
+        item = tree.identify_row(event.y)
+        # tree.tk.call(tree, "tag", "remove", "highlight")
+        tree.tk.call(tree, "tag", "remove", "highlight")
+        tree.tk.call(tree, "tag", "add", "highlight", item)
+
+        # if _iid != self.last_focus:
+        #     if self.last_focus:
+        #         print('True ', _iid)
+        #         tree = event.widget
+        #         item = tree.identify_row(event.y)
+        #         tree.tk.call(tree, "tag", "remove", "highlight")
+        #         tree.tk.call(tree, "tag", "add", "highlight", item)
+        #         # self.tree.tk.call()
+        #         # self.tree.tag_del(_iid, "highlight")
+        #         # print(self.tree.item(_iid)["tags"])
+        #     # self.tree.tag_add(_iid, "highlight")
+        #     self.last_focus = _iid
+        # print('tags b', tags)
+
+    def highlight_row(self, event):
+        tree = event.widget
+        item = self.tree.identify_row(event.y)
+        tree.tk.call(tree, "tag", 'remove', 'highlight')
+        tree.tk.call(tree, "tag", 'remove', 'highlight', item)
 
     def is_dir(self, abspath):
         pass
@@ -240,41 +274,35 @@ class App(object):
         return selected
 
     def button_add(self):
-        self.button = tk.Button(self.frame)
+        self.button = ttk.Button(self.frame, style='Accent.TButton')
         self.button.config(
-            text="add", command=self.make_change_window, width=8, height=1
+            text="add", command=self.make_change_window,
         )  # TODO self.send_checked
-        self.button.grid(row=5, column=0, sticky="w")
+        self.button.grid(row=2, column=0, sticky="wn", padx=15, pady=(10, 15))
 
     def button_lock(self):
         self.var = tk.StringVar()
-        self.btn_lock = tk.Checkbutton(self.frame)
+        self.btn_lock = ttk.Checkbutton(self.frame, style='Switch.TCheckbutton')
         self.btn_lock.config(
             onvalue="Unlocked",
             offvalue="Locked",
-            indicatoron=False,
             variable=self.var,
-            width=8,
-            height=2,
             textvariable=self.var,
             command=self.toggle,
         )
-        self.btn_lock.grid(row=5, column=0, sticky="e")
+        self.btn_lock.grid(row=2, column=0, sticky="e")
 
     def button_hide(self):
         self.var_hide = tk.StringVar()
-        self.btn_hide = tk.Checkbutton(self.frame)
+        self.btn_hide = ttk.Checkbutton(self.frame, style='Switch.TCheckbutton')
         self.btn_hide.config(
             onvalue="Show ALL",
             offvalue="HIDDEN",
-            indicatoron=False,
             variable=self.var_hide,
-            width=8,
-            height=1,
             textvariable=self.var_hide,
             command=self.btn_hide_command,
         )
-        self.btn_hide.grid(row=5, column=0, sticky="sn")
+        self.btn_hide.grid(row=2, column=0, sticky="sn")
 
     def btn_hide_command(self):
         if self.var_hide.get() == "Show ALL":

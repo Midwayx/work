@@ -14,14 +14,19 @@ def create_list(nt, txt="default"):
 
     return frame
 
-class UI(tk.Frame):
+
+class UI(ttk.Frame):
     def __init__(self):
         self.parent = tk.Tk()
 
-        self.parent.minsize("500", "800")  # TODO config
-        tk.Frame.__init__(self, self.parent)
+        self.parent.tk.call("source", "/home/dmitry/Projects/checker/code/Azure-ttk-theme-gif-based/azure.tcl")
+        self.parent.tk.call("set_theme", "light")
+
+        self.parent.minsize("900", "600")  # TODO config
+        ttk.Frame.__init__(self, self.parent)
         # self.pack(expand=tk.NO, fill=tk.X, side=tk.TOP)
         self.makeMenuBar()
+
         self.makeStartPage()
         self.parent.protocol('WM_DELETE_WINDOW', self.iconify)
         signal.signal(signal.SIGUSR1, self.sigusr1_handler)
@@ -87,38 +92,38 @@ class UI(tk.Frame):
         self.name = tk.StringVar()
 
         # frame = tk.Frame(dialog, bg='#42c2f4', bd=5)
-        frame = tk.Frame(self.dialog, bd=5)
-        frame.grid(sticky=tk.NSEW)
+        frame = ttk.Frame(self.dialog, style='Card.TFrame')
+        frame.grid(sticky=tk.NSEW, padx=5, pady=5)
         frame.grid_columnconfigure(0, weight=1)
         frame.grid_rowconfigure(0, weight=1)
-        ip_label = tk.Label(frame, text="Введите IPv4 адрес узла:")
-        name_label = tk.Label(frame, text="Введите имя узла:")
+        ip_label = ttk.Label(frame, text="Введите IPv4 адрес узла:")
+        name_label = ttk.Label(frame, text="Введите имя узла:")
 
-        name_label.grid(row=0, column=0, sticky="w")
-        ip_label.grid(row=1, column=0, sticky="w")
+        name_label.grid(row=0, column=0, sticky="w", padx=5)
+        ip_label.grid(row=1, column=0, sticky="w", padx=5)
 
         self.pattern = re.compile(
             r"^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
         )
 
         vcmd = (frame.register(self.validate_ip), "%i", "%P")
-        name_entry = tk.Entry(frame, textvariable=self.name)
-        ip_entry = tk.Entry(
+        self.name_entry = ttk.Entry(frame, textvariable=self.name)
+        self.ip_entry = ttk.Entry(
             frame,
             textvariable=self.ip,
             validate="focus",
             validatecommand=vcmd,
             invalidcommand=self.print_error,
         )
-        name_entry.grid(row=0, column=1, padx=5, pady=5)
-        ip_entry.grid(row=1, column=1, padx=5, pady=5)
-
-        self.message_button = tk.Button(
+        self.name_entry.grid(row=0, column=1, padx=5, pady=5)
+        self.ip_entry.grid(row=1, column=1, padx=5, pady=5)
+        self.binds()
+        self.message_button = ttk.Button(
             frame, text="send", command=self.send_cmd, state="normal"
         )
         self.message_button.grid(row=2, column=1, padx=5, pady=5, sticky="e")
 
-        self.label_valid = tk.Label(frame, text="")
+        self.label_valid = ttk.Label(frame, text="")
         self.label_valid.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky="w")
 
         self.message_button_var = tk.StringVar()
@@ -129,12 +134,32 @@ class UI(tk.Frame):
         self.dialog.focus_set()
         self.dialog.wait_window()
 
+    def binds(self):
+        self.name_entry.bind('<FocusOut>', self.validate_ip1)
+        self.name_entry.bind('<FocusIn>', self.validate_ip1)
+        self.name_entry.bind('<KeyRelease>', self.validate_ip1)
+
+    def validate_ip1(self, *_):
+        if self.name_entry.get() == "":
+            self.name_entry.state(["!invalid"])
+            print('1')
+        else:
+            if self.name_entry.get() == 'ghost5':
+                self.name_entry.state(["!invalid"])
+                print('12')
+            else:
+                self.name_entry.state(["invalid"])
+                print('113')
+
+
     def validate_ip(self, index, ip):
         if self.pattern.match(ip) is not None:
             self.message_button_var.set("Valid")
+            self.ip_entry.state(["!invalid"])
             # self.message_button.configure(state='active')
             return True
         self.message_button_var.set("Invalid")
+        self.ip_entry.state(["invalid"])
         # self.message_button.configure(state='disabled')
         return False
 
