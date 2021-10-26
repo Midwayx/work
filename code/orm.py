@@ -57,6 +57,16 @@ cur.execute(
 )
 conn.commit()
 
-data = ('ghost1', '//home/dmitry/spam/12.txt')
-cur.execute("DELETE FROM watched_files WHERE name=? AND path=?",data)
+cur.execute(
+    """CREATE TABLE IF NOT EXISTS events(
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            ghost TEXT NOT NULL,
+            file TEXT NOT NULL,
+            md5 TEXT NOT NULL,
+            time FLOAT,
+            event_type INTEGER);"""
+
+)
+# data = ('ghost1', '//home/dmitry/spam/12.txt')
+# cur.execute("DELETE FROM watched_files WHERE name=? AND path=?",data)
 conn.commit()

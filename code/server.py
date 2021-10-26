@@ -29,6 +29,7 @@ ALLOWED_HOSTS = {
 CONNECTED_HOSTS = {}
 HOSTS_UNDER_CONTROL = {}
 CONFIG_FILE = "/home/dmitry/Projects/checker/code/files/psv-config.txt"
+database = "mydatabase.db"
 startup = dict()
 
 clients = {}
@@ -105,40 +106,14 @@ def checksum_sha(filename, salt=None):
 check_sum2 = checksum_sha(sys.argv[0],salt=salt)"""
 
 
-# def send_com(conn):
-#     while True:
-#         cmd_list = clients
-#         row_reply = ("cmd",) + tuple(x for x in input().strip().split())
-#         reply = pickle.dumps(row_reply)
-#         conn.send(reply)
-#         sent.append(row_reply)
-
-
 def main_thread():
     global a
-    # /home/dmitry/
+    sqlite3.enable_callback_tracebacks(True)
     a = serverUI()
-    # gui.main.foo()
     a.tree = Tree(a.parent, "")
     a.tree.load_config()
     a.tree.load_tree()
-    # b.update('ghost3')
-    # print(Tree.get_checked)
     tk.mainloop()
-    # while True:
-    #     if input('gui\n') == 'gui':
-    #
-    # while True:
-    #     client, *cmd = tuple(x for x in input().strip().split())
-    #     if client in clients:
-    #         print('[MAIN THREAD]: cmd added')
-    #         clients[client].append(('cmd',) + tuple(cmd))
-    #     elif client.lower() == 'exit':
-    #         break
-    #     else:
-    #         print(f'This client {client} not found')
-    #     print(clients)
-    #     print('[MAIN THREAD]: list of sent command ', sent)
 
 
 def _main_thread():
@@ -151,9 +126,6 @@ def _main_thread():
             break
         else:
             debugger(f"This client {client} not found")
-        # print(clients)
-        # print("[MAIN THREAD]: list of sent command ", sent)
-
 
 class serverUI(gui.main.UI):
     def __init__(self):
@@ -163,7 +135,6 @@ class serverUI(gui.main.UI):
     @staticmethod
     @time_of_func_running
     def get_list(flag=None, client=None):
-        # print("get_list called")
         answer = {}
         q = list()
         timeout = 30
@@ -176,12 +147,10 @@ class serverUI(gui.main.UI):
                 clients[client].append(("cmd", "get_watchlist", "0"))
                 q.append(client)
         while q and timeout > 0:
-            # print(f"queue = {q}, resp = {resp}")
             for i in q:
                 for response in resp[i]:
                     if ("cmd", "get_watchlist", "0") in response:
                         answer[i] = response[2]
-                        # print(f"q={q}, i={i}")
                         resp[i].remove(response)
                         q.remove(i)
             time.sleep(0.05)
@@ -193,21 +162,19 @@ class serverUI(gui.main.UI):
 
     def add_file(self):
         pass
+
     @time_of_func_running
     def get_checked(self):
         lst = self.tree.get_checked()
-        # print(lst)
         showinfo("checked", str(lst))
 
     def add_host(self, ip, name):
-        # print(self.tree.config)
         """ добавить проверку на уникальность имени"""
         if ip not in self.tree.config:
             self.tree.config[ip] = {"name": name, "watched_files": []}
             # ALLOWED_HOSTS[ip] = name
             self.tree.save_config()
-            #self.tree.load_config()
-            conn = sqlite3.connect("mydatabase.db")
+            conn = sqlite3.connect(database)
             cur = conn.cursor()
             data = (name, ip, time.time())
             cur.execute(
@@ -227,24 +194,15 @@ class Tree(gui.tree2.App):
     load_status = 0
     cnt = 0
 
-    # def iconify(self):
-    #     self.master.protocol('WM_DELETE_WINDOW')
-
     def make_load_gif(self):
 
         label = tk.Label(self.frame)
-        #label.config(bg='systemTransparent')
         label.place(anchor='center', relx=0.5, rely=0.5)
-        #label.place(anchor='center')
         frameCnt = 15
         frames = [tk.PhotoImage(file='/home/dmitry/Загрузки/XOsX.gif', format='gif -index %i' % i).subsample(3, 3) for i in range(frameCnt)]
-        #frames = [tk.PhotoImage(file='/home/dmitry/Загрузки/XOsX.gif', format='gif -index %i' % (i)) for
-        #          i in range(frameCnt)]
-
 
         def update(ind):
             debugger(f'update start {ind=}')
-        #if self.load_status != 1:
             if self.load_status == 1:
                 debugger('load status = 1! Download complete')
                 label.place_forget()
@@ -256,9 +214,7 @@ class Tree(gui.tree2.App):
             label.configure(image=frame, bg='white')
             self.frame.update()
             self.frame.after(100, update, ind)
-
         update(0)
-        #label.place_forget()
 
     def start_up(self, client_ip):
         startup[client_ip] = True
@@ -294,18 +250,9 @@ class Tree(gui.tree2.App):
         self.parent_nodes[client_ip] = node
         self.tree.tag_add(node, client_ip)
         self.tree.tag_add(node, "ghost")
-        # self.tree.tag_add(node, 'tristate')
-        # self.tree.tag_add(node, 'disabled')
 
-        # print("Node from startup", node)
-        # print("Dirs from startup", self.dirs)
-        # nt = self.tree.insert('', 'end', text='ghost2', open=False)
-        # self.insert_node(node, abspath, abspath)
-        # self.tree.bind('<<TreeviewOpen>>', self.open_node)
         watch_list = serverUI.get_list(flag=True, client=(client_ip,))
-        # print(watch_list)
         diff = {client_ip: {"to_add": [], "to_remove": []}}
-        # print('self.config', self.config)
 
         for file in watch_list[client_ip]:
             """ на случай, если какой-то файл отслеживается клиентом, но в конфиге сервера его нет
@@ -313,7 +260,7 @@ class Tree(gui.tree2.App):
             # conn, cur = False, False
             if file not in self.config[client_ip]["watched_files"]:
             #     if not conn:
-            #         conn = sqlite3.connect("mydatabase.db")
+            #         conn = sqlite3.connect(database)
             #         cur = conn.cursor()
             #     data = (self.config[client_ip]['name'], file, )
             #     cur.execute("INSERT INTO watched_files(ghost, path, md5, time) VALUES(?, ?, ?, ?)", data)
@@ -325,7 +272,7 @@ class Tree(gui.tree2.App):
                 debugger(
                     f"[WARNING] File {file} from {client_ip} is not watching by client, but stored in server config"
                 )
-        #self.load_config()
+
         self.save_config()
         self.send_files(diff, start_up=True)
         self._load_tree(
@@ -365,17 +312,12 @@ class Tree(gui.tree2.App):
     def load_config(self):
         HOSTS = {}
         local_config = {}
-        conn = sqlite3.connect("mydatabase.db")
+        conn = sqlite3.connect(database)
         cur = conn.cursor()
         sql = "SELECT name, ip FROM ghosts"
 
         if not self.config:
             self.backup_tree = {}
-            # try:
-            #     with open(CONFIG_FILE, "rb") as f:
-            #         self.config = pickle.load(f)
-            # except Exception as e:
-            #     debugger("EXCEPTION: ", e)
 
         for ip_row in cur.execute(sql):
             name, ip = ip_row
@@ -421,34 +363,18 @@ class Tree(gui.tree2.App):
             self.path[host_ip] = {}
             self.saved_node[host_ip] = [("/", node)]
 
-            # self.tree.tag_add(node, 'ghost')
+
             if self.var.get() == "Locked":
                 self.tree.tag_add(node, "disabled")
-            # self.tree.tag_add(node, 'ghost')
             self.tree.change_state(node, "tristate")
             self.tree.tag_add(node, "disconnected")
             self.tree.tag_add(node, host_ip)
-            # for part in self.backup_tree[host]:
-            # node = self.tree.insert(node, 'end', text=part, open=False)
             self._load_tree(self.backup_tree[host_ip], node, host_ip, "/")
 
     def _load_tree(self, parent, iid, host_ip, abspath_, open=True, disconnect=True):
-        # print(parent, iid)
         for i in parent:
             abspath = abspath_ + "/" + i
             text = i
-            # if len(i) > 30:
-            #     words = i.split()
-            #     ch_counter = 0
-            #     splittext = []
-            #     for word in words:
-            #         if ch_counter >= 20:
-            #             splittext[-1] = splittext[-1] + '\n'
-            #             ch_counter = 0
-            #         splittext.append(word)
-            #         ch_counter += len(word)
-            #     text = ' '.join(splittext)
-            # print(f'load_tree abspath {abspath}')
             text_with_space = f' {text}'
             if abspath in self.config[host_ip]['md5']:
                 md5 = self.config[host_ip]['md5'][abspath]
@@ -466,20 +392,16 @@ class Tree(gui.tree2.App):
                     text=text_with_space,
                     open=open,
                 )
-            # print(self.saved_node)
             self.saved_node[host_ip].append((abspath, node))
             self.tree.tag_add(node, host_ip)
             if self.var.get() == "Locked":
                 self.tree.tag_add(node, "disabled")
             if disconnect:
                 self.tree.tag_add(node, "disconnected")
-            # print(len(parent[i]))
             self.tree.change_state(node, "tristate")
             self.tree.tag_add(node, host_ip)
             self.node[host_ip][node] = abspath
             self.path[host_ip][abspath] = node
-            # self.checked_node.append(node)
-            # print(self.path[host_ip])
 
             if not len(parent[i]):
                 self.tree.change_state(node, "checked")
@@ -491,24 +413,22 @@ class Tree(gui.tree2.App):
             self._load_tree(
                 parent[i], node, host_ip, abspath, open=open, disconnect=disconnect
             )
-            # print(' item in _load_tree', self.tree.item(node))
+
         abspath = "/"
-        # self.tree.change_state(node, 'checked')
+
 
     @time_of_func_running
     def listdir(self, abspath, client="127.0.0.1"):
         timeout = 10
         debugger('clients in listdir', clients)
         clients[client].append(("cmd", "get_listdir", abspath))
-        # print("here listdir called")
+
         while timeout > 0:
             debugger(timeout)
             time.sleep(0.2)
             timeout -= 0.2
-            # print('foo', resp[client])
 
             for response in resp[client]:
-                # print(response[0])
                 try:
                     if ("cmd", "get_listdir", abspath) == response[0]:
                         for i in response[2]:
@@ -555,11 +475,6 @@ class Tree(gui.tree2.App):
                     cmd = ("cmd", "rm", file)
                     clients[client].append(cmd)
 
-            # old_watchdict[client] = self.config[client]['watched_files']
-        # for client in self.config:
-        #   if client not in checked:
-        #      print(f'remove all {client}')
-        #     clients[client].append(('cmd','rm_all', '0'))
         for client in checked:
             for i in checked[client]:
                 path = os.path.normpath(i)
@@ -598,13 +513,6 @@ class Tree(gui.tree2.App):
             a.grab_set()
             a.focus_set()
             a.wait_window()
-            # scroll = tk.Scrollbar(command=text.yview)
-            # scroll.grid(row=0, column=1, sticky='ns')
-            # # scroll.pack(side=tk.LEFT, fill=tk.Y)
-            # text.config(yscrollcommand=scroll.set)
-            # tk.Label(a, text=msg).pack(expand=tk.YES, fill=tk.BOTH)
-            # a.bell()
-            # a.after(15000, lambda: a.destroy())
             return False
         else:
             showinfo("Успешно", "Выбранные файлы успешно добавлены")
@@ -622,10 +530,12 @@ class Tree(gui.tree2.App):
             to_add = []
             for file in current_watch_list:
                 if file not in changed_watch_list:
-                    to_remove.append(file)
+                    to_remove.append(file) #####
+            to_remove = set(to_remove)####
             for file in changed_watch_list:
                 if file not in current_watch_list:
                     to_add.append(file)
+            to_add = set(to_add)####
             if not changed_watch_list:
                 to_remove = "ALL"
             diff[client]["to_add"] = to_add
@@ -638,13 +548,9 @@ class Tree(gui.tree2.App):
         rm_counter = 0
         diff = self.get_diff()
         window = tk.Toplevel(self.master)
-        # window.width = 1400
-        # window.height = 1600
         window.geometry("1000x800")
         window.minsize("850", "300")
         #window.resizable(width=False, height=False)
-        # style = ttk.Style(window)
-        # style.theme_use('alt')
         window.grid_columnconfigure(0, weight=1)
         window.grid_rowconfigure(0, weight=1)
         frame = ttk.Frame(window, style='Card.TFrame')
@@ -726,12 +632,13 @@ class Tree(gui.tree2.App):
         received = {}
         buff = {}
         wait_to_remove = {}
+        delete_from_db = []
+        insert_into_db = []
         value, maximum = None, None
         lock = threading.Lock()
         lock1 = threading.Lock()
 
-        # conn = sqlite3.connect("mydatabase.db")
-        #cur = conn.cursor()
+
         while retry > 0:
             if not send:
                 # lock.acquire()
@@ -805,8 +712,8 @@ class Tree(gui.tree2.App):
                                 abspath = rsp[0][2]
                                 if rsp[1] == 'OK':
 
-                                    conn = sqlite3.connect("mydatabase.db")
-                                    cur = conn.cursor()
+                                    # conn = sqlite3.connect(database)
+                                    # cur = conn.cursor()
 
                                     if rsp[0][1] == "add":
                                         if (
@@ -817,8 +724,9 @@ class Tree(gui.tree2.App):
                                                 abspath
                                             )
                                             data = (self.config[client]['name'], abspath, rsp[2], time.time())
-                                            cur.execute("INSERT INTO watched_files(ghost, path, md5, time) VALUES(?, ?, ?, ?)", data)
-                                            conn.commit()
+                                            insert_into_db.append(data)
+                                            # cur.execute("INSERT INTO watched_files(ghost, path, md5, time) VALUES(?, ?, ?, ?)", data)
+                                            # conn.commit()
                                             message = "\tSuccessfully added to watch!" # TODO Много одинакового кода
                                             node = self.path[client][abspath]
                                             self.tree.item(node, value=('OK', rsp[2], 'отслеживается'))
@@ -837,27 +745,31 @@ class Tree(gui.tree2.App):
                                             message = "\tSuccessfully removed from watch!"
 
                                             data = (self.config[client]['name'], abspath)
-                                            # print('remove start', data)
-                                            cur.execute(
-                                                "DELETE FROM watched_files WHERE ghost=? AND path=?",
-                                                data)
-                                            conn.commit()
+                                            delete_from_db.append(data)
+                                            # cur.execute(
+                                            #     "DELETE FROM watched_files WHERE ghost=? AND path=?",
+                                            #     data)
+                                            # conn.commit()
                                             # print('remove commit')
 
                                         else:
                                             debugger("[DEBUG POINT send_files 2] UNEXPECTED ERROR!")
                                             message = "[SYNC ERROR] This file already is not watching."
 
-                                        conn.close()
 
                                 elif rsp[2] == 'FileNotFoundError':
                                     message = 'Error! This file does not exist (client send FileNotFoundError). ' \
                                               'File removed from tree'
                                     debugger(self.path)
                                     debugger(message)
+
                                     if abspath in self.config[client]['watched_files']:
                                         debugger(f'REMOVE file from config file = {abspath}')
                                         self.config[client]['watched_files'].remove(abspath)
+
+                                        data = (self.config[client]['name'], abspath)
+                                        delete_from_db.append(data)
+
                                     if abspath in self.path[client]:
                                         node = self.path[client][abspath]
                                         self.tree.detach(node)
@@ -865,6 +777,10 @@ class Tree(gui.tree2.App):
 
                                 elif rsp[2] == 'This file already watches':
                                     if sent_cmd in buff[client]:
+
+                                        data = (self.config[client]['name'], abspath, rsp[2], time.time())
+                                        insert_into_db.append(data)
+
                                         if (
                                             abspath
                                             not in self.config[client]["watched_files"]
@@ -872,12 +788,17 @@ class Tree(gui.tree2.App):
                                             self.config[client]["watched_files"].append(
                                                 abspath
                                             )
-                                        message = "\tSuccessfully added to watch!"
+
+                                        message = "\tSuccessfully added to watch!" # todo rmv from scope
                                     else:
                                         message = 'Error! This file already watches'
 
                                 elif rsp[2] == 'This file isn`t watching':
                                     if sent_cmd in buff[client]:
+
+                                        data = (self.config[client]['name'], abspath)
+                                        delete_from_db.append(data)
+
                                         if abspath in self.config[client]["watched_files"]:
                                             self.config[client]["watched_files"].remove(
                                                 abspath
@@ -889,7 +810,7 @@ class Tree(gui.tree2.App):
                                 else:
                                     message = rsp[2]
                                 debugger('message: ', message)
-                                self.save_config()
+                                #self.save_config()
                                 #self.load_config()
 
                                 if start_up:
@@ -913,8 +834,7 @@ class Tree(gui.tree2.App):
                                     )
 
                                 index = self.text_frame.search(abspath + ' ', "1.0", 'end')
-                                #print(index, abspath, len(abspath))
-                                # self.text_frame.update()
+                                self.text_frame.update()
                                 self.text_frame.configure(state="normal")
                                 if index:
                                     string = self.text_frame.get(f'{index} linestart', f'{index} lineend')
@@ -947,9 +867,38 @@ class Tree(gui.tree2.App):
 
                     except Exception as e:
                         debugger("[ERROR send_files]", e)
+                        if insert_into_db or delete_from_db:
+                            with sqlite3.connect(database) as conn:
+                                cur = conn.cursor()
+                                if insert_into_db:
+                                    cur.executemany(
+                                        "INSERT INTO watched_files(ghost, path, md5, time) VALUES(?, ?, ?, ?)",
+                                        insert_into_db
+                                    )
+                                    conn.commit()
+                                if delete_from_db:
+                                    cur.executemany(
+                                        "DELETE FROM watched_files WHERE ghost=? AND path=?",
+                                        delete_from_db)
+                                    conn.commit()
                         return "FAIL"
             if count == 0:
                 debugger(f'send files working {time.time()-start}')
+
+                if insert_into_db or delete_from_db:
+                    with sqlite3.connect(database) as conn:
+                        cur = conn.cursor()
+                        if insert_into_db:
+                            cur.executemany(
+                                "INSERT INTO watched_files(ghost, path, md5, time) VALUES(?, ?, ?, ?)",
+                                insert_into_db
+                            )
+                            conn.commit()
+                        if delete_from_db:
+                            cur.executemany(
+                                "DELETE FROM watched_files WHERE ghost=? AND path=?",
+                                delete_from_db)
+                            conn.commit()
                 return ['OK, DONE']
             retry -= 1
             if not start_up:
@@ -960,8 +909,22 @@ class Tree(gui.tree2.App):
                 )
                 #time.sleep(1)
             debugger(f'[RETRYING #{retry}]')
-        debugger(f'send files working {time.time() - start}')
-        conn.close()
+        debugger(f'send files working {time.time() - start} But..')
+
+        if insert_into_db or delete_from_db:
+            with sqlite3.connect(database) as conn:
+                cur = conn.cursor()
+                if insert_into_db:
+                    cur.executemany(
+                        "INSERT INTO watched_files(ghost, path, md5, time) VALUES(?, ?, ?, ?)",
+                        insert_into_db
+                    )
+                    conn.commit()
+                if delete_from_db:
+                    cur.execute(
+                        "DELETE FROM watched_files WHERE ghost=? AND path=?",
+                        delete_from_db)
+                    conn.commit()
         return ["..."]  # TODO call timeout error message
 
     def save_config(self):
@@ -977,7 +940,7 @@ class Tree(gui.tree2.App):
                 "name": client_name,
                 "watched_files": selected[client_ip],
             }
-        # print("[self.config] ", self.config)
+
         self.checked_node = [node for node in self.tree.get_checked()]
         debugger('ggg checked_node: ', self.checked_node)
         self.save_config()
@@ -1050,7 +1013,6 @@ class MyClienthandler(socketserver.BaseRequestHandler):
         debugger(f"[AUTH DATA] SALT = {self.salt} CHECK_SUM = {self.check_sum}")
         while True:
             data = pickle.loads(self.request.recv(1024))
-            # print(data)
             if data[0] == "ready to auth":
                 self.request.send(salt_msg)
             elif data[0] == self.salt:
@@ -1148,15 +1110,15 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                     debugger(f'[ROW RESPONSE FROM {self.client_ip}]: {ans}')
                     if ans[0] == 'event':
                         """(event, (ip, port), file, md5, time, event_type)"""
-                        #conn = sqlite3.connect('mydatabase.db')
-                        #cur = conn.cursor()
-                        host_name = a.tree.config[self.client_ip]['name']
-                        #host_name from response
-                        values = (host_name, *ans[2:])
-                        #cur.execute("INSERT INTO events(ghost, file, md5, time, event_type) VALUES(?, ?, ?, ?, ?)", values)
-                        #conn.commit()
-                        #conn.close()
-                        #print(a.tree.path[self.client_ip])
+
+                        with sqlite3.connect('mydatabase.db') as conn:
+                            cur = conn.cursor()
+                            host_name = a.tree.config[self.client_ip]['name']
+                            #host_name from response
+                            values = (host_name, *ans[2:])
+                            cur.execute("INSERT INTO events(ghost, file, md5, time, event_type) VALUES(?, ?, ?, ?, ?)", values)
+                            conn.commit()
+
                         while startup[self.client_ip]:
                             print('startup flag', startup)
                             time.sleep(0.1)
@@ -1168,13 +1130,13 @@ class MyClienthandler(socketserver.BaseRequestHandler):
                     if ans[0] == "KEEP-ALIVE":
                         if ans[2] == self.check_sum and ans[3] == self.salt:
                             reply = pickle.dumps(("info", "OK KEEP-ALIVE", now()))
-                            clients[self.client_ip].append(("info", "OK KEEP-ALIVE", now()))
+                            clients[self.client_ip].append(reply)
                             # self.request.send(reply)
                         else:
                             reply = pickle.dumps(
                                 ("CRITICAL ERROR", now(), self.check_sum, self.salt)
                             )
-                            clients[self.client_ip].append(("CRITICAL ERROR", now(), self.check_sum, self.salt))
+                            clients[self.client_ip].append(reply)
                             # self.request.send(reply)
                             debugger(
                                 f"[CRITICAL] Received hashsum from {self.client_address} isn`t correct:\n"

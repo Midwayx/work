@@ -111,8 +111,9 @@ def cmd_handler():
                 debugger("Unexpected message type")
                 print(msg)
         else:
-            #time.sleep(1)
+            time.sleep(0.1)
             continue
+        time.sleep(0.05)
         print('Время в цикле: ', time.time()-start)
 
 
@@ -171,7 +172,7 @@ def worker(sock):
                 print("Successfully connected to ", peer_name)  # TODO
                 break
         else:
-            time.sleep(0.5)
+            time.sleep(0.05)
     z = threading.Thread(target=keep_alive, args=(sock, salt))
     z.start()
     while True:
@@ -181,8 +182,8 @@ def worker(sock):
         # print('wait for sent', wait_for_sent)
         queue.append((data, peer_name))
         if not data:
-            time.sleep(1)
-            continue
+            time.sleep(0.05)
+            #continue
         #queue.append((data, peer_name))
 
 
