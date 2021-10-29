@@ -118,7 +118,7 @@ class App(ttk.Frame):
 
         # Menu for the Menubutton
         self.menu = tk.Menu(self)
-        self.menu.add_command(label="Menu item 1")
+        self.menu.add_cascade(label="Menu item 1")
         self.menu.add_command(label="Menu item 2")
         self.menu.add_separator()
         self.menu.add_command(label="Menu item 3")

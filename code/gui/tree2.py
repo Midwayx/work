@@ -55,12 +55,20 @@ class CheckBoxTreeview(CheckboxTreeview):
             if node not in saved:
                 self.tag_add(node, 'to_add')
 
+
 class App(object):
     def __init__(self, master, path):
+        # self.im_checked = ImageTk.PhotoImage(Image.open(IM_CHECKED), master=self)
+        self.frame1 = tk.PhotoImage(file='/home/dmitry/Загрузки/XOsX.gif')
+        frameCnt = 15
+        self.frames = [tk.PhotoImage(file='/home/dmitry/Загрузки/XOsX.gif', format='gif -index %i' % i).subsample(3, 3) for i
+                  in range(frameCnt)]
         # self.style = ttk.Style(master)
         # self.style.theme_use("alt")
         # self.style.configure("Treeview", font=("Helvetica", 12))
         self.snapshot = None
+        self.last_head = None
+        self.is_search_entry = tk.BooleanVar(value=False)
         self._detached = {}
         self.config = {}
         self.saved_node = {}
@@ -99,12 +107,14 @@ class App(object):
         ysb = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
         xsb = ttk.Scrollbar(frame, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscroll=ysb.set, xscroll=xsb.set)
-        self.tree.heading("#0", text="Узлы")
-        self.tree.heading("#1", text="Статус соединения", anchor=tk.W)
+        self.tree.heading("#0", text="Узлы", )
+        # self.tree.heading("#1", text="Статус соединения", anchor=tk.W, command=lambda: self.callback_bbox(1))
+        self.tree.heading("#1", text="Статус соединения", anchor=tk.W, command=self.callback_1)
         self.tree.heading("#2", text="Состояние защиты", anchor=tk.W)
         self.tree.heading("#3", text="Статус отслеживания", anchor=tk.W)
         self.tree.grid(row=0, column=0, sticky=tk.NSEW)
         ysb.grid(row=0, column=1, sticky="ns")
+        xsb.grid(row=1, column=0, sticky="ew", padx=(5, 0))
         xsb.grid(row=1, column=0, sticky="ew", padx=(5, 0))
         self.button_add()
         self.button_lock()
@@ -128,8 +138,9 @@ class App(object):
         self.bind_func_id = self.tree.bind("<<TreeviewOpen>>", self.open_node)
         #self.tree.bind("<Button-1>", self.tree._box_click, True)
         self.tree.bind("<Motion>", self.mycallback)
-        self.checked_node = [1]
-        self.last_focus = None
+        # self.checked_node = [1]
+        # self.last_focus = None
+
     def insert_node(self, parent, text, abspath):
 
         tags = self.tree.item(parent)["tags"]  # TODO validation ip
@@ -206,34 +217,51 @@ class App(object):
 
     def mycallback(self, event):
 
-        # _iid = self.tree.identify_row(event.y)
-        # tags = self.tree.item(_iid)["tags"]
-        # print('tags before', tags)
         tree = event.widget
+        head = tree.identify("column", event.x, event.y)
         item = tree.identify_row(event.y)
-        # tree.tk.call(tree, "tag", "remove", "highlight")
         tree.tk.call(tree, "tag", "remove", "highlight")
-        tree.tk.call(tree, "tag", "add", "highlight", item)
+        if self.last_head:
+            self.tree.heading(self.last_head, image=False)
+        if not item and head:
+            self.tree.heading(head, image=self.tree.im_find)
+            self.last_head = head
+            # if self.is_search_entry.get() and head[1] == '1':
+            #     print(f'{head=}')
+            #     self.callback_bbox(int(head[1]), reuse=True)
 
-        # if _iid != self.last_focus:
-        #     if self.last_focus:
-        #         print('True ', _iid)
-        #         tree = event.widget
-        #         item = tree.identify_row(event.y)
-        #         tree.tk.call(tree, "tag", "remove", "highlight")
-        #         tree.tk.call(tree, "tag", "add", "highlight", item)
-        #         # self.tree.tk.call()
-        #         # self.tree.tag_del(_iid, "highlight")
-        #         # print(self.tree.item(_iid)["tags"])
-        #     # self.tree.tag_add(_iid, "highlight")
-        #     self.last_focus = _iid
-        # print('tags b', tags)
+
+        else:
+            tree.tk.call(tree, "tag", "add", "highlight", item)
 
     def highlight_row(self, event):
         tree = event.widget
-        item = self.tree.identify_row(event.y)
+        item = tree.identify_row(event.y)
         tree.tk.call(tree, "tag", 'remove', 'highlight')
-        tree.tk.call(tree, "tag", 'remove', 'highlight', item)
+        tree.tk.call(tree, "tag", 'add', 'highlight', item)
+
+    def callback_1(self):
+        self.entry_search = ttk.Entry(self.frame, width=50)
+        self.entry_search.insert(0, '1')
+        self.entry_search.grid(row=0, column=0, sticky="new", padx=(5, 0))
+
+    def callback_bbox(self, num_head, reuse=None):
+        total_width = 0
+        for i in range(num_head):
+            total_width += self.tree.column(column=f'#{i}', option='width')
+        column_width = self.tree.column(column=f'#{num_head}', option='width')
+        # print(f'{total_width=}, {column_width=}')
+        if not reuse:
+            self.entry_search = ttk.Entry(self.tree, width=10)
+            self.entry_search.insert(0, '1')
+            self.entry_search.place(in_=self.tree, x=(total_width + 30), y=5)
+            self.is_search_entry.set(True)
+        else:
+            self.entry_search.place_configure(x=(total_width + 30))
+            print(column_width)
+            print(total_width-column_width)
+            # self.entry_search.place(in_=self.tree, x=(total_width-column_width - 2), y=5)
+
 
     def is_dir(self, abspath):
         pass

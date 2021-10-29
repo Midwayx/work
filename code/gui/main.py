@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter.messagebox import *
 
+THEME_PATH = '/home/dmitry/Projects/checker/code/Azure-ttk-theme-gif-based/azure.tcl'
 
 def create_list(nt, txt="default"):
     frame = ttk.Frame(nt)
@@ -19,7 +20,7 @@ class UI(ttk.Frame):
     def __init__(self):
         self.parent = tk.Tk()
 
-        self.parent.tk.call("source", "/home/dmitry/Projects/checker/code/Azure-ttk-theme-gif-based/azure.tcl")
+        self.parent.tk.call("source", THEME_PATH)
         self.parent.tk.call("set_theme", "light")
 
         self.parent.minsize("900", "600")  # TODO config
@@ -30,6 +31,9 @@ class UI(ttk.Frame):
         self.makeStartPage()
         self.parent.protocol('WM_DELETE_WINDOW', self.iconify)
         signal.signal(signal.SIGUSR1, self.sigusr1_handler)
+        self.pattern = re.compile(
+            r"^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+        )
         # self.mainloop()
 
     def iconify(self):
@@ -38,7 +42,6 @@ class UI(ttk.Frame):
         #self.parent.after(5000, self.parent.deiconify)
 
     def sigusr1_handler(self, signum, frame):
-        #print('hi')
         self.parent.deiconify()
         self.parent.update()
         self.parent.grab_set()
@@ -79,6 +82,49 @@ class UI(ttk.Frame):
     def add_host(self, ip, name):
         return False, "Error!"
 
+    # def make_search_entry(self):
+
+    # def make_dialog_remove(self):
+    #     dialog = tk.Toplevel(self.parent)
+    #     dialog.title("Удалить узел")
+    #     dialog.minsize("400", "120")
+    #     dialog.width = 600
+    #     dialog.height = 120
+    #     dialog.resizable(width=False, height=False)
+    #     dialog.grid_columnconfigure(0, weight=1)
+    #     self.grid_rowconfigure(0, weight=1)
+    #     self.ip_rmv = tk.StringVar()
+    #
+    #     frame = ttk.Frame(dialog, style='Card.TFrame')
+    #     frame.grid(sticky=tk.NSEW, padx=5, pady=5)
+    #     frame.grid_columnconfigure(0, weight=1)
+    #     frame.grid_rowconfigure(0, weight=1)
+    #     ip_label = ttk.Label(frame, text="Введите IPv4 адрес узла:")
+    #     name_label = ttk.Label(frame, text="Введите имя узла:")
+    #     name_label.grid(row=0, column=0, sticky="w", padx=5)
+    #     ip_label.grid(row=1, column=0, sticky="w", padx=5)
+    #
+    #     self.name_entry_remove = ttk.Entry(frame)
+    #     self.ip_entry_remove = ttk.Entry(
+    #         frame,
+    #         textvariable=self.ip_rmv,
+    #         validate="focus",
+    #         validatecommand=self.validate_ip,
+    #     )
+    #     self.name_entry_remove.grid(row=0, column=1, padx=5, pady=5)
+    #     self.ip_entry_remove.grid(row=1, column=1, padx=5, pady=5)
+    #     self.label_remove = ttk.Label(frame, text="")
+    #     self.label_remove.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky="w")
+    def make_dialog_remove(self):
+        self.dialog_remove = tk.Toplevel(self.parent)
+        self.dialog_remove.minsize("400", "120")
+        self.dialog_remove.width = 600
+        self.dialog_remove.height = 120
+        self.dialog.resizable(width=False, height=False)
+        self.dialog.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+
     def make_dialog_add(self):
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("Добавить узел")
@@ -102,17 +148,13 @@ class UI(ttk.Frame):
         name_label.grid(row=0, column=0, sticky="w", padx=5)
         ip_label.grid(row=1, column=0, sticky="w", padx=5)
 
-        self.pattern = re.compile(
-            r"^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
-        )
-
-        vcmd = (frame.register(self.validate_ip), "%i", "%P")
+        # vcmd = (frame.register(self.validate_ip), "%i", "%P")
         self.name_entry = ttk.Entry(frame, textvariable=self.name)
         self.ip_entry = ttk.Entry(
             frame,
             textvariable=self.ip,
             validate="focus",
-            validatecommand=vcmd,
+            validatecommand=self.validate_ip,
             invalidcommand=self.print_error,
         )
         self.name_entry.grid(row=0, column=1, padx=5, pady=5)
@@ -135,32 +177,38 @@ class UI(ttk.Frame):
         self.dialog.wait_window()
 
     def binds(self):
-        self.name_entry.bind('<FocusOut>', self.validate_ip1)
-        self.name_entry.bind('<FocusIn>', self.validate_ip1)
-        self.name_entry.bind('<KeyRelease>', self.validate_ip1)
+        self.ip_entry.bind('<FocusOut>', self.validate_ip)
+        self.ip_entry.bind('<FocusIn>', self.validate_ip)
+        self.ip_entry.bind('<KeyRelease>', self.validate_ip)
+        self.name_entry.bind('<FocusOut>', self.validate_name)
+        self.name_entry.bind('<FocusIn>', self.validate_name)
+        self.name_entry.bind('<KeyRelease>', self.validate_name)
 
-    def validate_ip1(self, *_):
+    def validate_name(self, *_):
         if self.name_entry.get() == "":
-            self.name_entry.state(["!invalid"])
-            print('1')
+            self.name_entry.state(["invalid"])
         else:
-            if self.name_entry.get() == 'ghost5':
-                self.name_entry.state(["!invalid"])
-                print('12')
-            else:
-                self.name_entry.state(["invalid"])
-                print('113')
+            self.name_entry.state(["!invalid"])
 
+            # if self.name_entry.get() == 'ghost5':
+            #     self.name_entry.state(["!invalid"])
+            # else:
+            #     self.name_entry.state(["invalid"])
 
-    def validate_ip(self, index, ip):
+    def validate_ip(self, *_):
+        ip = self.ip.get()
+        if ip == "":
+            self.message_button_var.set("Invalid")
+            self.ip_entry.state(["invalid"])
+            return False
         if self.pattern.match(ip) is not None:
             self.message_button_var.set("Valid")
             self.ip_entry.state(["!invalid"])
-            # self.message_button.configure(state='active')
+            self.message_button.configure(state='active')
             return True
         self.message_button_var.set("Invalid")
         self.ip_entry.state(["invalid"])
-        # self.message_button.configure(state='disabled')
+        self.message_button.configure(state='disabled')
         return False
 
     def print_error(self):
@@ -168,19 +216,24 @@ class UI(ttk.Frame):
         pass
 
     def send_cmd(self):
-        print(self.message_button_var.get())
-        if self.validate_ip("0", self.ip.get()):
-            print(self.message_button_var.get())
-            self.dialog.after(1500, lambda: self.dialog.destroy())
-            status = self.add_host(self.ip.get(), self.name.get())
+        if self.message_button_var.get():
+            ip = self.ip.get()
+            name = self.name.get()
+            # self.dialog.after(1500, lambda: self.dialog.destroy())
+            status = self.add_host(ip, name)
             if status[0]:
                 showinfo("Добавлено", "Узел успешно добавлен")
             else:
-                showwarning("Внимание!", f"Данный узел уже добавлен как {status[1]}")
+                if not status[1]:
+                    self.ip_entry.state(["invalid"])
+                    showerror("Внимание!", f"Узел c ip {ip} уже добавлен как '{status[2]}'")
+                elif not status[2]:
+                    self.name_entry.state(["invalid"])
+                    print(status)
+                    showerror("Внимание!", f"Узел c именем {name} уже добавлен как {status[1]}")
         else:
             self.label_valid.configure(text="Invalid IPv4 address. Try again.")
             self.label_valid.after(5500, lambda: self.label_valid.configure(text=""))
-            # showinfo('Invalid IPv4', 'You input invalid ipV4 address.\ntry again')
 
 
 # root window

@@ -1,8 +1,9 @@
-
+#!/home/dmitry/Projects/checker/env/bin/python
 # -*- coding: utf-8 -*-
 import argparse
 import hashlib
 import os.path
+import signal
 import socketserver, time
 import sqlite3
 from functools import reduce
@@ -35,6 +36,16 @@ startup = dict()
 clients = {}
 resp: Dict[Any, Any] = {}
 
+
+def sigusr1_handler(self, signum, frame):
+    # self.parent.update()
+    # self.parent.grab_set()
+    # self.parent.focus_set()
+    print('hi')
+    # self.parent.deiconify()
+    # self.parent.update()
+    # self.parent.grab_set()
+    # self.parent.focus_set()
 
 def now():
     return time.ctime(time.time())
@@ -113,6 +124,7 @@ def main_thread():
     a.tree = Tree(a.parent, "")
     a.tree.load_config()
     a.tree.load_tree()
+    # signal.signal(signal.SIGUSR1, a.sigusr1_handler)
     tk.mainloop()
 
 
@@ -126,6 +138,7 @@ def _main_thread():
             break
         else:
             debugger(f"This client {client} not found")
+
 
 class serverUI(gui.main.UI):
     def __init__(self):
@@ -169,9 +182,13 @@ class serverUI(gui.main.UI):
         showinfo("checked", str(lst))
 
     def add_host(self, ip, name):
-        """ добавить проверку на уникальность имени"""
+
+        for _ip in self.tree.config:
+            if self.tree.config[_ip]['name'] == name:
+                return False, _ip, name
+
         if ip not in self.tree.config:
-            self.tree.config[ip] = {"name": name, "watched_files": []}
+            self.tree.config[ip] = {"name": name, "watched_files": [], 'md5': {}}
             # ALLOWED_HOSTS[ip] = name
             self.tree.save_config()
             conn = sqlite3.connect(database)
@@ -185,9 +202,9 @@ class serverUI(gui.main.UI):
             conn.commit()
             conn.close()
 
-            return True, 0
+            return True, ip, name
         else:
-            return False, self.tree.config[ip]["name"]
+            return False, False, self.tree.config[ip]['name']
 
 
 class Tree(gui.tree2.App):
@@ -531,11 +548,11 @@ class Tree(gui.tree2.App):
             for file in current_watch_list:
                 if file not in changed_watch_list:
                     to_remove.append(file) #####
-            to_remove = set(to_remove)####
+            to_remove = list(set(to_remove))####
             for file in changed_watch_list:
                 if file not in current_watch_list:
                     to_add.append(file)
-            to_add = set(to_add)####
+            to_add = list(set(to_add))####
             if not changed_watch_list:
                 to_remove = "ALL"
             diff[client]["to_add"] = to_add
@@ -613,11 +630,17 @@ class Tree(gui.tree2.App):
         text_frame.config(yscrollcommand=scroll.set)
 
         self.pb.grid_remove()
+        window.transient(self.master)
+        # self.dialog.lift()
+        window.grab_set()
+        window.focus_set()
+        window.wait_window()
 
     def send_files(self, diff, start_up=False, button=None):
 
         start = time.time()
         if button:
+            button.configure(state='disabled')
             button.grid_remove()
             self.pb.grid()
             self.info_label.grid_forget()
